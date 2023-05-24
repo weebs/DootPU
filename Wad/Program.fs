@@ -8,7 +8,7 @@ type App() as this =
     inherit Window()
     
     do
-        this.Title <- "Example App!"
+        this.Title <- "Example App"
     let btn = new Button(Text = "Say Hi")
     //
     // do btn.OnClicked <- fun () -> printfn "click"
@@ -64,6 +64,7 @@ try
             let name = 
                 dir.ReadChars(8)
                 |> Array.map string
+                |> Array.filter (fun s -> s <> "\000")
                 |> String.concat ""
             yield {
                 FilePos = filePos
@@ -79,35 +80,32 @@ try
             yield info, { PosX = reader.ReadInt16(); PosY = reader.ReadInt16() }
     |]
     for info in contents do
-        printfn $"{info.Name} - "
-    Application.Shutdown ()
+        printfn $"{info.Name} - {info.Size} - {info.FilePos}"
+        
+        
+    // try Application.Driver.Refresh () with _ -> ()
+    // Environment.SetEnvironmentVariable("LOOP", "TRUE")
+    // try Application.RequestStop(Application.Current) with _ -> ()
     
-    // printfn "%A" vertexes
-    // printfn "%A" vertexData
-    // printfn "verts = %A" verts
-    // let view model dispatch =
-    //     printfn "yo"
-    //     View.page [
-    //         page.menuBar [
-    //             menubar.menus [
-    //                 menu.menuBarItem [
-    //                     menu.prop.title "File Explorer!"
-    //                 ]
-    //             ]
-    //         ]
-    //     ]
-    // let update msg model = model, []
-    // // Application.Shutdown()
-    // Program.quit ()
+    // Application.Shutdown()
+    // Threading.Thread.Sleep(2000)
+    
+    
+    
     // Console.Clear()
-    //
-    Threading.Thread(Threading.ThreadStart(fun () ->
-    //     let program = Program.mkProgram (fun _ -> (), []) update view
-    //     Program.run program
-        Application.Run<App> ()
-    )).Start()
-    // task { Application.Run<App> () }
-    // |> ignore
     
+    //
+    // Threading.Thread(Threading.ThreadStart(fun () ->
+    //     Application.Run<App> ()
+    // )).Start()
+    let cache = contents |> Array.groupBy (fun info -> info.Name) |> Map.ofArray
+    // printfn "%A %A" cache["THINGS"] (bytes |> Array.skip dirAddress |> Array.skip cache["THINGS"].[0].Size)
+    // printfn "%A" (Array.ofSeq cache.Keys |> Array.filter (fun key -> key.StartsWith "THIN"))
+    let readThing (reader: BinaryReader) =
+        { PosX = reader.ReadInt16(); PosY = reader.ReadInt16(); Angle = reader.ReadInt16(); Type = reader.ReadInt16(); Flags = reader.ReadInt16() }
+    for item in cache["THINGS"] do
+        printfn "%A" (bytes |> Array.skip item.FilePos)
+        printfn "%A" item
+        printfn "%A" (new BinaryReader(new MemoryStream(bytes |> Array.skip item.FilePos)) |> readThing)
     
 with error -> printfn "%A" error
