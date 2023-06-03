@@ -6,11 +6,16 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Condition="$(OS) != 'Windows_NT'" Include="/ope/ope.fs" />
+        <Compile Condition="$(OS) == 'Windows_NT'" Include="../ope.fs" />
+        <Compile Include="State.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Terminal.Gui.Elmish" Version="2.1.172" />
+<!--      <PackageReference Include="glfw" Version="3.3.8" />-->
+      <PackageReference Include="Raylib-cs" Version="4.2.0.2" />
+<!--      <PackageReference Include="Terminal.Gui.Elmish" Version="2.1.172" />-->
     </ItemGroup>
 
 </Project>
