@@ -485,9 +485,9 @@ try
                 movementDir <- movementDir - Vector3(0.0f, movementSpeed, 0f)
                 
             if Raylib.IsKeyDown(KeyboardKey.KEY_E) <> CBool false then
-                State.theta <- State.theta - 0.005f
+                State.theta <- State.theta - 0.01f
             if Raylib.IsKeyDown(KeyboardKey.KEY_Q) <> CBool false then
-                State.theta <- State.theta + 0.005f
+                State.theta <- State.theta + 0.01f
             // let diff = State.c.position - init
             // State.c.target <- State.c.target + diff
             // let cameraDir = Quaternion(State.c.position - State.c.target, 0f)
