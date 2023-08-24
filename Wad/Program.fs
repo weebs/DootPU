@@ -251,7 +251,7 @@ try
     let linesBySideDefId =
         Map.ofArray [|
             yield! (lines |> Array.map (fun line -> line.FrontSideDef, line) |> Array.groupBy fst)
-            yield! (lines |> Array.map (fun line -> line.BackSideDef, line)) |> Array.groupBy fst
+            yield! lines |> Array.map (fun line -> line.BackSideDef, line) |> Array.groupBy fst
         |]
     let sidesBySectorId =
         Map.ofArray (
@@ -484,9 +484,9 @@ try
             if Raylib.IsKeyDown(KeyboardKey.KEY_LEFT_SHIFT) <> CBool false then
                 movementDir <- movementDir - Vector3(0.0f, movementSpeed, 0f)
                 
-            if Raylib.IsKeyDown(KeyboardKey.KEY_Q) <> CBool false then
-                State.theta <- State.theta - 0.005f
             if Raylib.IsKeyDown(KeyboardKey.KEY_E) <> CBool false then
+                State.theta <- State.theta - 0.005f
+            if Raylib.IsKeyDown(KeyboardKey.KEY_Q) <> CBool false then
                 State.theta <- State.theta + 0.005f
             // let diff = State.c.position - init
             // State.c.target <- State.c.target + diff
