@@ -22,6 +22,7 @@ open Raylib_cs
 let filePath = Path.Join(__SOURCE_DIRECTORY__, "doom1.wad")
 printfn "Hello from F#"
 printfn "%A" (File.ReadAllBytes filePath)
+let inline toPair (i: int) value = (i, value)
 
 type ParserResult<'t, 'state> = //, 'u, 'm> =
     | Success of 't * 'state
@@ -247,6 +248,39 @@ try
     printfn "indices = %A" e1m1.Vertexes[0]
     printfn "verts = %A" verts
         
+    let linesBySideDefId =
+        Map.ofArray [|
+            yield! (lines |> Array.map (fun line -> line.FrontSideDef, line) |> Array.groupBy fst)
+            yield! (lines |> Array.map (fun line -> line.BackSideDef, line)) |> Array.groupBy fst
+        |]
+    let sidesBySectorId =
+        Map.ofArray (
+            e1m1.SideDefs
+            |> Array.groupBy (fun sideDef -> sideDef.Sector))
+    let linesBySectorId =
+        Array.groupBy fst [|
+            for (id, def) in Array.mapi toPair e1m1.SideDefs do
+                if linesBySideDefId.ContainsKey (int16 id) then
+                    for line in linesBySideDefId[int16 id] do
+                        yield (def.Sector, line)
+            // for line in e1m1.LineDefs do
+            //     for def in e1m1.SideDefs do
+            //         yield (def.Sector, line)
+                // for sector in e1m1.Sectors do
+            // for kv in sidesBySectorId do
+            //     if e1m1.Sectors.Length > int kv.Key then
+            //         let sector = e1m1.Sectors[int kv.Key]
+            //         let sectorId = int kv.Key
+            //         for side in kv.Value do
+            //             for kv in linesBySideDefId do
+            //                 for line in kv.Value do
+            //                     yield (sectorId, line)
+        |]
+        |> Map.ofArray
+        // |> Map.map (fun id lines -> lines |> Array.distinctBy snd)
+    printfn "===================="
+    printfn "%A" linesBySectorId[42s]
+        
         
     
     // Loop.handleInput <- fun s ->
@@ -259,8 +293,13 @@ try
     //     else
     //         printfn "%A" cache[s]
     let mutable msg = ""
-    State.c.position <- Vector3(1552f, 0f, -2560f)
-    State.c.target <- Vector3(1553f, 0f, -2560f)
+    State.c.up <- Vector3(0f, 1f, 0f)
+    State.c.position <- Vector3(320f, 33f, -3200f)
+    let cameraDir = Quaternion.CreateFromYawPitchRoll(State.theta, State.phi, 0f)
+    let r = Quaternion.Normalize(cameraDir * Quaternion(0f, 0f, -1f, 0f) / cameraDir)
+    // State.c.target <- State.c.position + Vector3(1f, 0f, 0f)
+    State.c.target <- Vector3(r.X, r.Y, r.Z)
+    Raylib.SetCameraMode(State.c, CameraMode.CAMERA_CUSTOM)
     State.callback3dFn <- fun () ->
         Raylib.DrawCube(Vector3(0f, 0f, 0f), 1f, 1f, 1f, Color.SKYBLUE)
         let segments =
@@ -270,6 +309,7 @@ try
                     start = e1m1.Vertexes[int segment.StartVert]
                     _end = e1m1.Vertexes[int segment.EndVert]
                     line = e1m1.LineDefs[int segment.LineNumber]
+                    lineIndex = segment.LineNumber
                     dir = segment.Direction
                     offset = segment.SegmentOffset
                 |}
@@ -277,29 +317,137 @@ try
         let sectors =
             e1m1.Sectors
             |> Array.mapi (fun index sector ->
-                sector, segments
+                (index, sector),
+                    segments
+                    |> Array.mapi (fun segIndex seg -> segIndex, seg)
                     |> Array.skip (int e1m1.Subsectors[index].FirstSegmentIndex)
                     |> Array.take (int e1m1.Subsectors[index].SegmentCount)
+                    |> Array.map (fun (index, seg) ->  index, {| seg with start = e1m1.Vertexes[int seg.line.StartVertex]; _end = e1m1.Vertexes[int seg.line.EndVertex] |})
+                    // |> Array.map (fun (index, seg) -> seg.line)
             )
-        for (sector, lines) in sectors do
-            // Raylib.DrawCube(Vector3(info.))
-            for line in lines do
-                let ceiling = single sector.CeilingHeight
-                let floor = single sector.FloorHeight
-                let v1 = Vector3(single line.start.PosX, ceiling, single line.start.PosY)
-                let v1a = Vector3(single line._end.PosX, ceiling, single line._end.PosY)
-                let v2 = Vector3(single line.start.PosX, floor, single line.start.PosY)
-                let v2a = Vector3(single line._end.PosX, floor, single line._end.PosY)
-                msg <- sprintf "%A %A %A %A" v1 v1a v2 v2a
-                Raylib.DrawLine3D(v1, v1a, Color.DARKGREEN)
-                Raylib.DrawLine3D(v2, v2a, Color.DARKGREEN)
-                Raylib.DrawCube(v1, 1f, 1f, 1f, Color.BLUE)
+        // let sectors =
+        //     e1m1.Sectors
+        //     |> Array.mapi (fun index sector ->
+        //         (index, sector),
+        //             lines
+        //             |> Array.mapi (fun lineIndex line -> lineIndex, line)
+        //             |> Array.skip( e1m1.Subsectors[index].SegmentCount)
+        //     )
+        // for ((sectorIndex, sector), segments) in sectors do
+        //     // Raylib.DrawCube(Vector3(info.))
+        //     for (lineIndex, seg) in segments do
+        //         let ceiling = single sector.CeilingHeight
+        //         let floor = single sector.FloorHeight
+        //         let floorY = ceiling - floor
+        //         let v1 = Vector3(single seg.start.PosX, ceiling, single seg.start.PosY)
+        //         let v1a = Vector3(single seg._end.PosX, ceiling, single seg._end.PosY)
+        //         let v2 = Vector3(single seg.start.PosX, floorY, single seg.start.PosY)
+        //         let v2a = Vector3(single seg._end.PosX, floorY, single seg._end.PosY)
+        //         msg <- sprintf "%A %A %A %A" v1 v1a v2 v2a
+        //         Raylib.DrawLine3D(v1, v1a, Color.DARKGREEN)
+        //         Raylib.DrawLine3D(v2, v2a, Color.DARKGREEN)
+        //         Raylib.DrawCube(v1, 1f, 1f, 1f, Color.BLUE)
+        //         Raylib.DrawCube(v1 + Vector3(0f, -2f, 0f), 1f, 1f, 1f, Color.BLUE)
+        //         Raylib.DrawCube(v1 + Vector3(2f, -2f, 0f), 1f, 1f, 1f, Color.BLUE)
+        //         Raylib.DrawCube(Vector3(single seg.start.PosX, ceiling, single seg.start.PosY), 1f, 1f, 1f, Color.DARKBLUE)
+        //         let diff = State.c.target - State.c.position
+        //         Raylib.DrawCube(State.c.target, 0.1f, 0.1f, 0.1f, Color.PINK)
+        //         if seg.lineIndex = 79s then
+        //             // printfn "%A" line
+        //             Raylib.EndMode3D()
+        //             Raylib.DrawText($"%A{seg}", 0, 320, 12, Color.BLACK)
+        //             Raylib.BeginMode3D (State.c)
+        // let lineSegments =
+        //     [|
+        //         for subsector in e1m1.Subsectors do
+        //             let sectors =
+        //                 e1m1.Segs
+        //                 |> Array.skip (int subsector.FirstSegmentIndex)
+        //                 |> Array.take (int subsector.SegmentCount)
+        //             for sector in sectors do
+        //                 yield (int sector.LineNumber, sector)
+        //     |] |> Map.ofArray
+        
+        // for kv in sidesBySectorId do
+        //     if e1m1.Sectors.Length > int kv.Key then
+        //         let sector = e1m1.Sectors[int kv.Key]
+        //         for side in kv.Value do
+        //             for kv in linesBySideDefId do
+        //                 for line in kv.Value do
+        for kv in linesBySectorId do
+            if e1m1.Sectors.Length > int kv.Key then
+                let sector = e1m1.Sectors[int kv.Key]
+                for (id, (_, line)) in kv.Value do
+                    let v1 = e1m1.Vertexes[int line.StartVertex]
+                    let v2 = e1m1.Vertexes[int line.EndVertex]
+                    Raylib.DrawLine3D(
+                        Vector3(float32 v1.PosX, float32 sector.CeilingHeight, float32 v1.PosY),
+                        Vector3(float32 v2.PosX, float32 sector.CeilingHeight, float32 v2.PosY),
+                        Color.PINK)
+                    Raylib.DrawLine3D(
+                        Vector3(float32 v1.PosX, float32 sector.FloorHeight, float32 v1.PosY),
+                        Vector3(float32 v2.PosX, float32 sector.FloorHeight, float32 v2.PosY),
+                        Color.PINK)
+                    Raylib.DrawLine3D(
+                        Vector3(float32 v1.PosX, float32 sector.FloorHeight, float32 v1.PosY),
+                        Vector3(float32 v1.PosX, 0f, float32 v1.PosY),
+                        Color.GREEN)
+                    Raylib.DrawLine3D(
+                        Vector3(float32 v2.PosX, float32 sector.FloorHeight, float32 v2.PosY),
+                        Vector3(float32 v2.PosX, 0f, float32 v2.PosY),
+                        Color.GREEN)
+                    // Raylib.DrawLine3D(
+                    //     Vector3(float32 v1.PosX, float32 sector.CeilingHeight, float32 v1.PosY),
+                    //     Vector3(float32 v1.PosX, 280f, float32 v1.PosY),
+                    //     Color.GREEN)
+        ()
+        //     
+        // for (index, sector) in Array.mapi toPair e1m1.Sectors do
+        //     let lines = [|
+        //         let sides = Array.mapi toPair (e1m1.SideDefs |> Array.filter (fun sideDef -> int sideDef.Sector = index))
+        //         for side in sides do
+        //             yield e1m1.LineDefs
+        //     |]
+        //     ()
+            
+        // lines |> Array.iteri (fun lineIndex line ->
+        //     let v1 = e1m1.Vertexes[int line.StartVertex]
+        //     let v2 = e1m1.Vertexes[int line.EndVertex]
+        //     try
+        //         if e1m1.SideDefs.Length > int line.FrontSideDef then
+        //             if e1m1.Sectors.Length > int e1m1.SideDefs[int line.FrontSideDef].Sector then
+        //                 let sideA = e1m1.SideDefs[int line.FrontSideDef]
+        //                 let sectorA = e1m1.Sectors[int sideA.Sector]
+        //                     
+        //                 // let seg = lineSegments[lineIndex].
+        //                 Raylib.DrawLine3D(
+        //                     Vector3(float32 v1.PosX, float32 sectorA.CeilingHeight, float32 v1.PosY),
+        //                     Vector3(float32 v2.PosX, float32 sectorA.CeilingHeight, float32 v2.PosY),
+        //                     Color.PINK)
+        //                 Raylib.DrawLine3D(
+        //                     Vector3(float32 v1.PosX, float32 sectorA.FloorHeight, float32 v1.PosY),
+        //                     Vector3(float32 v1.PosX, 0f, float32 v1.PosY),
+        //                     Color.GREEN)
+        //                 Raylib.DrawLine3D(
+        //                     Vector3(float32 v1.PosX, float32 sectorA.FloorHeight, float32 v1.PosY),
+        //                     Vector3(float32 v2.PosX, float32 sectorA.FloorHeight, float32 v2.PosY),
+        //                     Color.PINK)
+        //                 Raylib.DrawLine3D(
+        //                     Vector3(float32 v2.PosX, float32 sectorA.FloorHeight, float32 v2.PosY),
+        //                     Vector3(float32 v2.PosX, 0f, float32 v2.PosY),
+        //                     Color.GREEN)
+        //     with error ->
+        //         // printfn "%A" line
+        //         ()
+        // )
         ()
     State.callbackFn <- fun () ->
         Raylib.DrawText(msg, 0, 0, 12, Color.DARKBROWN)
         let mutable count = 0
+        
         try
             // Console.Clear()
+            let toVector (q: Quaternion) = Vector3(q.X, q.Y, q.Z)
             let width = Raylib.GetScreenWidth() / 2
             let height = Raylib.GetScreenHeight() / 2
             let line_verts =
@@ -318,23 +466,82 @@ try
                 int x, int y
             let (cameraX, cameraY) = alignToScreen { PosX = int16 State.c.position.X; PosY = int16 State.c.position.Z }
             Raylib.DrawCircle(cameraX, cameraY, 10f, Color.GREEN)
+            let movementSpeed = 0.8f
+            // let init = State.c.position
+            // let dir = Quaternion(init, 1.0f)
+            // let mutable q = Quaternion(0f, 0f, 0f, 0f)
+            let mutable movementDir = Vector3(0f, 0f, 0f)
             if Raylib.IsKeyDown(KeyboardKey.KEY_D) <> CBool false then
-                State.c.position <- State.c.position + Vector3(0.1f, 0f, 0f)
+                movementDir <- movementDir + Vector3(movementSpeed, 0f, 0f)
+            if Raylib.IsKeyDown(KeyboardKey.KEY_A) <> CBool false then
+                movementDir <- movementDir - Vector3(movementSpeed, 0f, 0f)
+            if Raylib.IsKeyDown(KeyboardKey.KEY_W) <> CBool false then
+                movementDir <- movementDir - Vector3(0.0f, 0f, movementSpeed)
+            if Raylib.IsKeyDown(KeyboardKey.KEY_S) <> CBool false then
+                movementDir <- movementDir + Vector3(0.0f, 0f, movementSpeed)
+            if Raylib.IsKeyDown(KeyboardKey.KEY_SPACE) <> CBool false then
+                movementDir <- movementDir + Vector3(0.0f, movementSpeed, 0f)
+            if Raylib.IsKeyDown(KeyboardKey.KEY_LEFT_SHIFT) <> CBool false then
+                movementDir <- movementDir - Vector3(0.0f, movementSpeed, 0f)
+                
+            if Raylib.IsKeyDown(KeyboardKey.KEY_Q) <> CBool false then
+                State.theta <- State.theta - 0.005f
+            if Raylib.IsKeyDown(KeyboardKey.KEY_E) <> CBool false then
+                State.theta <- State.theta + 0.005f
+            // let diff = State.c.position - init
+            // State.c.target <- State.c.target + diff
+            // let cameraDir = Quaternion(State.c.position - State.c.target, 0f)
+            let v1 = State.c.position - State.c.target
+            let up = State.c.up
+            let cameraDir = Quaternion.Normalize(Quaternion(
+                Vector3.Cross(v1, up),
+                MathF.Sqrt(
+                    (v1.LengthSquared() * up.LengthSquared()))
+                    + Vector3.Dot(v1, up)))
+            Raylib.DrawText($"Position = %A{State.c.position}", 0, 20, 12, Color.BLUE)
+            // let cameraDir = Quaternion.Normalize(Quaternion(State.c.target - State.c.position, 0f))
+            // let movementDir = cameraDir * Quaternion(movementDir.X, movementDir.Y, movementDir.Z, 0f) * Quaternion.Conjugate(cameraDir)
+            let cameraDir = Quaternion.CreateFromYawPitchRoll(State.theta, State.phi, 0f)
+            // printfn "===================================="
+            // printfn $"movement direction = %A{movementDir}"
+            // printfn $"camera direction = %A{cameraDir}"
+            
+            e1m1.LineDefs |> Array.iteri (fun index line ->
+                ()
+                // if index = 79 then
+                //     Raylib.DrawText($"%A{e1m1.Vertexes[67]}", 0, 240, 12, Color.GREEN)
+                //     Raylib.DrawText($"%A{e1m1.Vertexes[68]}", 0, 280, 12, Color.GREEN)
+                    // Raylib.DrawText($"%A{line.he}", 0, 320, 12, Color.GREEN)
+                    // printfn "%A" line
+                    // printfn "%A" e1m1.Vertexes[67]
+                    // printfn "%A" e1m1.Vertexes[68]
+            )
+            
+            let movementDir = Vector3.Transform(movementDir, cameraDir)
+            // let movementDir = Quaternion(Vector3.Transform(movementDir, cameraDir), 0f)
+            // printfn $"movement direction after rotation = %A{movementDir}"
+            State.c.position <- State.c.position + (movementDir)
+            let cameraDir = Quaternion.CreateFromYawPitchRoll(State.theta, State.phi, 0f)
+            let r = Quaternion.Normalize(cameraDir * Quaternion(0f, 0f, -1f, 0f) / cameraDir)
+            // State.c.target <- State.c.position + Vector3(1f, 0f, 0f)
+            State.c.target <- State.c.position + Vector3(r.X, r.Y, r.Z)
+            // State.c.target <- State.c.target + (movementDir)
+            // State.c.up <- Vector3(0f, 1f, 0f)
+            // printfn $"Position = {State.c.position}"
+            // printfn $"Target = {State.c.target}"
             for line in lines do
-                count <- count + 1
-                // printfn "%A" line
                 let v1 = verts[int line.StartVertex]
                 let (v1x, v1y) = alignToScreen v1
                 let v2 = verts[int line.EndVertex]
                 let (v2x, v2y) = alignToScreen v2
                 Raylib.DrawLine(int v1.PosX, int v1.PosY, int v2.PosX, int v2.PosY, Color.BLUE)
                 // Raylib.DrawText(sprintf "%A %A %A %A %A %A" width height minX minY maxX maxY, 0, 0, 12, Color.BLUE)
-                if count = 1 then
-                    Raylib.DrawText(sprintf "%A %A %A %A" v1x v1y v2x v2y, 0, 40, 12, Color.BLUE)
+                // if count = 1 then
+                //     Raylib.DrawText(sprintf "%A %A %A %A" v1x v1y v2x v2y, 0, 40, 12, Color.BLUE)
                 // Raylib.DrawCircle(int v1x, int v1y, 2f, Color.BLUE)
                 Raylib.DrawLine(v1x, v1y, v2x, v2y, Color.BLUE)
                 // Raylib.DrawText(sprintf "%A - %A" v1 v2, 20, 40, 24, Color.SKYBLUE)
-                Raylib.DrawLine3D(Vector3(single v1.PosX, single v1.PosY, 0f), Vector3(0f, 0f, 0f), Color.DARKGREEN)
+                // Raylib.DrawLine3D(Vector3(single v1.PosX, single v1.PosY, 0f), Vector3(0f, 0f, 0f), Color.DARKGREEN)
                 // Raylib.ClearBackground(Color.WHITE)
                 // Raylib.DrawText("Hello, world!", 0, 0, 24, Color.SKYBLUE)
         with error ->

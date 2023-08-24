@@ -39,7 +39,8 @@ let mutable callback3dFn = fun () ->
         elif pos < -800 then
             velocity <- 1
         Raylib.DrawCube(Vector3((single pos * 0.5f) * 0.1f, 0f, 0f), 2f, 2f, 2f, Color.YELLOW)
-
+let mutable theta = 1.57f
+let mutable phi = 0f
 let loop = env.CreateVar("LOOP")
 if loop.Value = "run" then
     loop.Set("stop")
@@ -50,7 +51,7 @@ thread.start_ <| fun () ->
     Raylib.InitWindow(800, 400, "raylib")
     Raylib.SetTargetFPS 120
     c.position <- Vector3(10f, 10f, 10f)
-    c.target <- Vector3(0f, 0f, 0f)
+    // c.target <- Vector3(0f, 0f, 0f)
     c.up <- Vector3(0f, 1f, 0f)
     c.fovy <- 45f
     c.projection <- CameraProjection.CAMERA_PERSPECTIVE
