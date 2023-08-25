@@ -39,6 +39,7 @@ let mutable callback3dFn = fun () ->
         elif pos < -800 then
             velocity <- 1
         Raylib.DrawCube(Vector3((single pos * 0.5f) * 0.1f, 0f, 0f), 2f, 2f, 2f, Color.YELLOW)
+let mutable initFn = fun () -> ()
 let mutable theta = 1.57f
 let mutable phi = 0f
 let loop = env.CreateVar("LOOP")
@@ -46,7 +47,7 @@ if loop.Value = "run" then
     loop.Set("stop")
     while loop.Value = "stop" do Threading.Thread.Sleep 100
 let mutable c = Camera3D()
-thread.start_ <| fun () ->
+let initWindow () =
     loop.Set("run")
     Raylib.InitWindow(800, 400, "raylib")
     Raylib.SetTargetFPS 120
@@ -55,6 +56,9 @@ thread.start_ <| fun () ->
     c.up <- Vector3(0f, 1f, 0f)
     c.fovy <- 45f
     c.projection <- CameraProjection.CAMERA_PERSPECTIVE
+let threadStart = fun () ->
+    initWindow ()
+    initFn ()
     while not (Raylib.WindowShouldClose() || loop.Value = "stop") do
         pos <- pos + velocity
         Raylib.BeginDrawing()
@@ -74,6 +78,15 @@ thread.start_ <| fun () ->
 
     Raylib.CloseWindow()
     loop.Set("stopped")
+let mutable raylib3dThread = None
+let initGame fn =
+    match raylib3dThread with
+    | Some thread ->
+        fn ()
+    | None ->
+        initFn <- fn
+        raylib3dThread <- Some <| thread.start threadStart
+        
 printfn "Task started"
 
 

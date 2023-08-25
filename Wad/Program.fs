@@ -292,14 +292,14 @@ try
     //             printfn $"{h.Name}"
     //     else
     //         printfn "%A" cache[s]
-    let mutable msg = ""
-    State.c.up <- Vector3(0f, 1f, 0f)
-    State.c.position <- Vector3(320f, 33f, -3200f)
-    let cameraDir = Quaternion.CreateFromYawPitchRoll(State.theta, State.phi, 0f)
-    let r = Quaternion.Normalize(cameraDir * Quaternion(0f, 0f, -1f, 0f) / cameraDir)
-    // State.c.target <- State.c.position + Vector3(1f, 0f, 0f)
-    State.c.target <- Vector3(r.X, r.Y, r.Z)
-    Raylib.SetCameraMode(State.c, CameraMode.CAMERA_CUSTOM)
+    let init () =
+        State.c.up <- Vector3(0f, 1f, 0f)
+        State.c.position <- Vector3(320f, 33f, -3200f)
+        let cameraDir = Quaternion.CreateFromYawPitchRoll(State.theta, State.phi, 0f)
+        let r = Quaternion.Normalize(cameraDir * Quaternion(0f, 0f, -1f, 0f) / cameraDir)
+        // State.c.target <- State.c.position + Vector3(1f, 0f, 0f)
+        State.c.target <- Vector3(r.X, r.Y, r.Z)
+        Raylib.SetCameraMode(State.c, CameraMode.CAMERA_CUSTOM)
     State.callback3dFn <- fun () ->
         Raylib.DrawCube(Vector3(0f, 0f, 0f), 1f, 1f, 1f, Color.SKYBLUE)
         let segments =
@@ -442,7 +442,8 @@ try
         // )
         ()
     State.callbackFn <- fun () ->
-        Raylib.DrawText(msg, 0, 0, 12, Color.DARKBROWN)
+        // let mutable msg = ""
+        // Raylib.DrawText(msg, 0, 0, 12, Color.DARKBROWN)
         let mutable count = 0
         
         try
@@ -549,5 +550,5 @@ try
             Raylib.DrawText(string count, 20, 40, 24, Color.SKYBLUE)
             // Raylib.DrawText(sprintf "%A" lines[count - 1], 80, 0, 24, Color.SKYBLUE)
             Raylib.DrawText(sprintf "%A" lines, 80, 100, 12, Color.SKYBLUE)
-    
+    State.initGame init
 with error -> printfn "%A" error
