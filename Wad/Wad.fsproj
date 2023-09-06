@@ -8,14 +8,24 @@
     <ItemGroup>
         <Compile Condition="$(OS) != 'Windows_NT'" Include="/ope/ope.fs" />
         <Compile Condition="$(OS) == 'Windows_NT'" Include="../ope.fs" />
+        <Compile Include="Fable.BinaryReader.fs" />
+        <Compile Include="Reader.fs" />
         <Compile Include="State.fs" />
         <Compile Include="Program.fs" />
+        <PackageReference Include="Fable.Core" Version="4.0.0" />
     </ItemGroup>
 
     <ItemGroup>
 <!--      <PackageReference Include="glfw" Version="3.3.8" />-->
+      <PackageReference Include="Fable.Browser.Blob" Version="1.3.0" />
       <PackageReference Include="Raylib-cs" Version="4.2.0.2" />
 <!--      <PackageReference Include="Terminal.Gui.Elmish" Version="2.1.172" />-->
+    </ItemGroup>
+
+    <ItemGroup>
+<!--      <ProjectReference Include="..\Algebra\Algebra.csproj" />-->
+      <ProjectReference Include="..\Algebra\Algebra.csproj" />
+      <ProjectReference Include="..\Doot.Maths\Doot.Maths.fsproj" />
     </ItemGroup>
 
 </Project>

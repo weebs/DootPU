@@ -1,4 +1,4 @@
-﻿module Wad.Reader
+﻿module Wad.Engine
 open System
 open System.Linq
 open System.IO
@@ -7,6 +7,9 @@ open System.IO
 open System.Numerics
 open System.Security.Cryptography
 open Raylib_cs
+open PGA
+open Wad.Reader
+// open Fs
 
 
 // type App() as this =
@@ -18,7 +21,15 @@ open Raylib_cs
 //     //
 //     // do btn.OnClicked <- fun () -> printfn "click"
 //     member this.Foo = ()
-    
+// type PGA3D() =
+//     inherit PGA.PGA3D()
+    // static member public op_Amp (a, b) = PGA.PGA3D.op_Amp (a, b)
+type PGA3D with
+    member this.Foo = ()
+    member this.X = this[13]
+    member this.Y = this[12]
+    member this.Z = this[11]
+    member this.ToPoint = $"({this.X}, {this.Y}, {this.Z})"
 let filePath = Path.Join(__SOURCE_DIRECTORY__, "doom1.wad")
 printfn "Hello from F#"
 printfn "%A" (File.ReadAllBytes filePath)
@@ -29,6 +40,21 @@ type ParserResult<'t, 'state> = //, 'u, 'm> =
     // | Partial of 't * string * 'state
     | Error of string
 type Parser<'state, 'stream, 't> = 'state -> 'stream -> ParserResult<'t, 'state>
+let point = PGA3D.point(1f, 2f, 4.23f)
+let p2 = point + point
+let line = p2 &&& point
+let string' = $"{point.ToPoint} {p2.ToPoint} {line}"
+
+let cameraEye = PGA3D.point(0f, 0f, -1f)
+let cameraLens = PGA3D.point(0f, 0f, 0f)
+
+let triangleVertex = PGA3D.point(1f, 1f, 200f)
+let rayDirection = cameraEye &&& triangleVertex
+let cameraPlane = PGA3D.point(0f, 1f, 0f) &&& cameraLens &&& PGA3D.point(1f, 0f, 0f)
+let screenCoordinates = (rayDirection ^^^ cameraPlane).normalized()
+let string'' = screenCoordinates.ToPoint
+let normalizedScreenCoordiantes = screenCoordinates.normalized()
+let string''' = screenCoordinates.normalized().ToPoint
 let parseInt16 : Parser<int, byte[], int16> = fun state stream ->
     match stream[state] with
     | digit when "0123456789".Contains(char digit) ->
@@ -59,130 +85,10 @@ printfn $"dirAddress = {numLumps}"
 // printfn $"twoInts = %A{twoInts}"
 // printfn $"# bytes = {bytes.Length}"
 let dir = new BinaryReader(new MemoryStream(bytes |> Array.skip dirAddress))
-type [<Struct>] Lump = { FilePos: int; Size: int; Name: string }
-type [<Struct>] Thing = { PosX: int16; PosY: int16; Angle: int16; Type: int16; Flags: int16 }
-type [<Struct>] Vertex = { PosX: int16; PosY: int16 }
-type [<Struct>] SideDefs = { OffsetX: int16; OffsetY: int16; UpperTexture: string; LowerTexture: string; MiddleTexture: string; Sector: int16 }
-type [<Struct>] LineDef = {
-    StartVertex: int16
-    EndVertex: int16
-    Flags: int16
-    // ActionSpecial: int16
-    SpecialType: int16
-    SectorTag: int16
-    // todo: Doom 2 only
-    FrontSideDef: int16
-    BackSideDef: int16
-}
-type [<Struct>] Subsector = { SegmentCount: int16; FirstSegmentIndex: int16 }
-
-type [<Struct>] Segment = {
-    StartVert: int16
-    EndVert: int16
-    Angle: int16
-    LineNumber: int16
-    // https://doomwiki.org/wiki/Seg
-    Direction: int16 // 0 = same as linedef, 1 = opposite of linedef
-    SegmentOffset: int16
-}
-
-
-
-
-type [<Struct>] Sector =
-  { FloorHeight: int16
-    CeilingHeight: int16
-    FloorTexture: string
-    CeilingTexture: string
-    AmbientLight: int16
-    Special: int16
-    Tag: int16 }
-type Level = {
-    Things: Thing[]
-    LineDefs: LineDef[]
-    SideDefs: SideDefs[]
-    Vertexes: Vertex[]
-    Segs: Segment[]
-    Subsectors: Subsector[]
-    Nodes: Lump
-    Sectors: Sector[]
-    Reject: Lump
-    Blockmap: Lump
-}
-let readThing (reader: BinaryReader) =
-    { PosX = reader.ReadInt16(); PosY = reader.ReadInt16(); Angle = reader.ReadInt16(); Type = reader.ReadInt16(); Flags = reader.ReadInt16() }
-let readString (reader: BinaryReader) =
-    reader.ReadChars(8) |> Array.filter (fun c -> c <> char "\000") |> Array.map string |> (String.concat "")
-let readVertex (reader: BinaryReader) =
-    { PosX = reader.ReadInt16(); PosY = reader.ReadInt16() }
-let readSegment (reader: BinaryReader) =
-    {
-        StartVert = reader.ReadInt16()
-        EndVert = reader.ReadInt16()
-        Angle = reader.ReadInt16()
-        LineNumber = reader.ReadInt16()
-        Direction = reader.ReadInt16()
-        SegmentOffset = reader.ReadInt16()
-    }
-    
-let readSector (reader: BinaryReader) =
-    {
-        FloorHeight = reader.ReadInt16()
-        CeilingHeight = reader.ReadInt16()
-        FloorTexture = readString reader
-        CeilingTexture = readString reader
-        AmbientLight = reader.ReadInt16()
-        Special = reader.ReadInt16()
-        Tag = reader.ReadInt16()
-    }
-let readSubsector (reader: BinaryReader) =
-    {
-        SegmentCount = reader.ReadInt16()
-        FirstSegmentIndex = reader.ReadInt16() 
-    }
-let readLineDef (reader: BinaryReader) =
-    { StartVertex = reader.ReadInt16()
-      EndVertex = reader.ReadInt16()
-      Flags = reader.ReadInt16()
-      // ActionSpecial = reader.ReadInt16() 
-      SpecialType = reader.ReadInt16()
-      SectorTag = reader.ReadInt16()
-      FrontSideDef = reader.ReadInt16() 
-      BackSideDef = reader.ReadInt16() }
-let readSideDef (reader: BinaryReader) : SideDefs =
-    {
-        OffsetX = reader.ReadInt16()
-        OffsetY = reader.ReadInt16()
-        UpperTexture = readString reader
-        LowerTexture = readString reader
-        MiddleTexture = readString reader
-        Sector = reader.ReadInt16() 
-    }
-let toReader lump =
-    let bytes = bytes |> Array.skip lump.FilePos |> Array.take lump.Size
-    new BinaryReader(new MemoryStream(bytes))
-let parse<'t> (reader: BinaryReader -> 't) lump =
-    let r = toReader lump
-    [|
-        for i in 1..(lump.Size / sizeof<'t>) do
-            yield reader r
-    |]
 try
-    let headers = [|
-        for _ in 1..numLumps do
-            let filePos = dir.ReadInt32()
-            let size = dir.ReadInt32()
-            let name = 
-                dir.ReadChars(8)
-                |> Array.map string
-                |> Array.filter (fun s -> s <> "\000")
-                |> String.concat ""
-            yield {
-                FilePos = filePos
-                Size = size
-                Name = name
-            }
-    |]
+    let file = Wad.Reader.File.readFile bytes
+    let headers = file
+    // let headers = Wad.Reader.headers dir numLumps
     let vertexes = [|
         for info in headers |> Array.filter (fun info -> info.Name = "VERTEXES") do
             // printfn $"Data: {info.Name} (size: {info.Size})"
@@ -190,8 +96,8 @@ try
             use reader = new BinaryReader(new MemoryStream(data))
             yield info, { PosX = reader.ReadInt16(); PosY = reader.ReadInt16() }
     |]
-    for info in headers do
-        printfn $"{info.Name} - {info.Size} - {info.FilePos}"
+    // for info in headers do
+    //     printfn $"{info.Name} - {info.Size} - {info.FilePos}"
         
         
     // try Application.Driver.Refresh () with _ -> ()
@@ -228,7 +134,7 @@ try
         |> Array.map (fun chunk -> headers |> Array.skip chunk[0] |> Array.take (1 + chunk[1] - chunk[0]))
         |> Array.map (fun level -> level[0].Name, level |> Array.map (fun header -> header.Name, header) |> Map.ofArray)
         |> Map.ofArray
-        
+    let inline parse parser lump = parse bytes parser lump
     let parseLevel (level: Map<string, Lump>) =
         {
             Things = parse readThing level["THINGS"]

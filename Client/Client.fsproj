@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net6.0</TargetFramework>
+        <RootNamespace>Dootverse.Client</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Doot.Maths\Doot.Maths.fsproj" />
+    </ItemGroup>
+
+
+    <ItemGroup>
+<!--        <Compile Include="../PGA/Library.fs" />-->
+        <Compile Include="../Wad/Reader.fs" />
+        <Compile Include="Rotations.fs" />
+        <PackageReference Include="Fable.Browser.WebRTC" Version="1.5.0" />
+        <PackageReference Include="Fable.Core" Version="4.0.0" />
+        <PackageReference Include="Fable.Fetch" Version="2.6.0" />
+        <PackageReference Include="Fable.Promise" Version="3.2.0" />
+        <PackageReference Include="Feliz" Version="2.6.0" />
+        <PackageReference Include="Feliz.Bulma" Version="3.0.0" />
+        <PackageReference Include="Thoth.Json" Version="10.2.0" />
+        <PackageReference Include="Feliz.UseElmish" />
+    </ItemGroup>
+    <ItemGroup>
+      <Content Include="*.html" />
+      <Compile Include="DoomGame.fs" />
+      <Compile Include="Raycaster.Demo.fs" />
+      <Compile Include="Lib\MVU.fs" />
+      <Compile Include="Svg.Demo.fs" />
+    </ItemGroup>
+
+</Project>
