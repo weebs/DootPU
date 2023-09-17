@@ -5,7 +5,12 @@
     <title>PGA F# Tests</title>
 </head>
 <body>
-    <script src="DoomGame.fs.js" type="module"></script>
+
+
+    <script type="module">
+        import { createGameRoot } from './Game.fs.js'
+        createGameRoot()
+    </script>
     
     <div id="root"></div>
 </body>

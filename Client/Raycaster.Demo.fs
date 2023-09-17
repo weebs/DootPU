@@ -1,5 +1,9 @@
 module Dootverse.Client.Raycaster_Demo
 
+open System
+open System.Collections.Generic
+open Browser.Types
+open Dootverse.Client.Svg
 open Browser
 open Fable.Core
 open Feliz
@@ -43,20 +47,22 @@ let drawMap width height (grid: Map<int * int, string>) =
         //         console.log ("x = ", x, "y = ", y)
         // )
 let width, height = 20, 20
-let map = Map.ofArray [|
+let mapSize = 10
+let mapData = Map.ofArray [|
     // (-10, 10), "pink"
-    for i in -10..10 do
-        (i, 10), "pink"
-        (i, -10), "pink"
-        (-10, i), "pink"
-        (10, i), "pink"
+    for i in -mapSize..mapSize do
+        (i, mapSize), "pink"
+        (i, -mapSize), "pink"
+        (-mapSize , i), "pink"
+        (mapSize, i), "pink"
     // (-2, 2), "pink"
     (8, 8), "blue"
-    (2, 4), "green"
+    (2, 3), "green"
+    (-4, 4), "orange"
 |]
 [<ReactComponent>]
 let RaycastDemo () =
-    let map, setMap = React.useState(map)
+    let map, setMap = React.useState(mapData)
     let canvasRef = React.useRef None
     let canvas, setCanvas = React.useState null
     console.log ("canvas = ", box canvas)
@@ -212,6 +218,8 @@ let RaycastDemo () =
             prop.ref setCanvas
         ]
     ]
-// try drawMap width height map with error -> console.log ("error = ", error)
-ReactDOM.createRoot (document.getElementById "root")
-|> fun root -> root.render(RaycastDemo ())
+// type Screen = {
+    // voxel: int -> int -> int -> string -> ReactElement
+    // width: int
+// } with
+    // member this.voxel size x y color = Svg.rect []

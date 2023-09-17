@@ -8,21 +8,91 @@ open Fable.Core
 // module System =
     // module Numerics =
     
+// type Vector2(x: float32, y: float32) =
 type Vector2(x: float32, y: float32) =
     member this.X = x
     member this.Y = y
     member this.Length () = MathF.Sqrt(x ** 2f + y ** 2f)
     static member (/) (a: Vector2, b) = Vector2(a.X / b, a.Y / b)
+    static member (-) (a: Vector2, b: Vector2) =
+        Vector2(a.X - b.X, a.Y - b.Y)
+    static member (+) (a: Vector2, b: Vector2) =
+        Vector2(a.X + b.X, a.Y + b.Y)
     static member (*) (a: Vector2, b: float32) =
         // let a = a / a.Length()
         Vector2(a.X * b, a.Y * b)
+    member this.Normalized =
+        let length = this.Length()
+        if length = 0f then
+            this
+        else
+            Vector2(x / length, y / length)
     override this.ToString() = $"({x}, {y})"
 // #if FABLE_COMPILER
 // open System.Numerics
 // #endif
 
+let findIntersection (u: Vector2) (v: Vector2) checkVoxel =
+    let distance value slope =
+        if MathF.Ceiling value = value then float32 (MathF.Sign(slope))
+        elif slope > 0f then MathF.Ceiling(value) - value
+        else MathF.Floor(value) - value
+    let mutable x = u.X
+    let mutable y = u.Y
+    let mutable count = 0
+    let stepX = if v.X >= 0f then 1 else -1
+    let stepY = if v.Y >= 0f then 1 else -1
+    let mutable voxelX =
+        // if MathF.Round u.X = u.X && MathF.Round v.X = v.X && v.X < 0f then
+        if MathF.Round u.X = u.X && v.X < 0f then
+            int (MathF.Floor x) - 1
+        else
+            int (MathF.Floor x)
+    let mutable voxelY =
+        // if MathF.Round u.Y = u.Y && MathF.Round v.Y = v.Y && v.Y < 0f then
+        if MathF.Round u.Y = u.Y && v.Y < 0f then
+            int (MathF.Floor y) - 1
+        else
+            int (MathF.Floor y)
+    let mutable voxelFound = None
+    while count < 100000 && voxelFound = None do
+        count <- count + 1
+        let dx = distance x v.X
+        let dy = distance y v.Y
+        let dxy = (v.Y / v.X) * dx
+        let dyx = (v.X / v.Y) * dy
+        let tx = Vector2(dx, dxy)
+        let ty = Vector2(dyx, dy)
+        // let tDifference = tx.Length() - ty.Length()
+        // todo: we can calculate t based on the distance multiplied by the ratio of
+        // todo that side to the length of the vector
+        let tDifference = ((tx.X * tx.X) + (tx.Y * tx.Y)) - ((ty.X * ty.X) + (ty.Y * ty.Y))
+        let t =
+            // todo: Cases where tx and ty are roughly equal (a corner is hit)
+            if MathF.Abs(tDifference) < 0.00000001f then
+                voxelX <- voxelX + stepX
+                voxelY <- voxelY + stepY
+                ty
+            elif tDifference < 0f then
+                voxelX <- voxelX + stepX
+                tx
+            else
+                voxelY <- voxelY + stepY
+                ty
+        x <- x + t.X
+        y <- y + t.Y
+        // todo: Can we remove the rounding behavior?
+        // if MathF.Abs(MathF.Round(x) - x) < 0.0000001f then
+            // x <- MathF.Round x
+        // if MathF.Abs(MathF.Round(y) - y) < 0.0000001f then
+            // y <- MathF.Round y
+        if checkVoxel (voxelX, voxelY) then    
+            voxelFound <- Some ((voxelX, voxelY), (x, y))
+    voxelFound
 let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
-    JS.console.log $"findVoxelsAlongRay {u} {v}"
+    let debug = false
+    if debug then
+        JS.console.log $"findVoxelsAlongRay {u} {v}"
     let distance value slope =
         if MathF.Ceiling value = value then float32 (MathF.Sign(slope))
         elif slope > 0f then MathF.Ceiling(value) - value
@@ -47,35 +117,44 @@ let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
     seq {
         // todo: yield starting voxel
         // yield (x, y)
-        yield (voxelX, voxelY)
+        yield ((voxelX, voxelY), (x, y))
         while count < 100000 do
             count <- count + 1
-            JS.console.log "=========================="
-            JS.console.log $"n = {count}, ({x}, {y})"
+            if debug then
+                JS.console.log "=========================="
+                JS.console.log $"n = {count}, ({x}, {y}) (last step = ({voxelX}, {voxelY})"
             let dx = distance x v.X
             let dy = distance y v.Y
             let dxy = (v.Y / v.X) * dx
             let dyx = (v.X / v.Y) * dy
             let tx = Vector2(dx, dxy)
             let ty = Vector2(dyx, dy)
-            JS.console.log $"dx = {dx}; dxy = {dxy}; tx = {tx};"
-            JS.console.log $"dy = {dy}; dyx = {dyx}; ty = {ty}"
+            if debug then
+                JS.console.log $"dx = {dx}; dxy = {dxy}; tx = {tx};"
+                JS.console.log $"dy = {dy}; dyx = {dyx}; ty = {ty}"
             // let tDifference = tx.Length() - ty.Length()
+            // todo: we can calculate t based on the distance multiplied by the ratio of
+            // todo that side to the length of the vector
             let tDifference = ((tx.X * tx.X) + (tx.Y * tx.Y)) - ((ty.X * ty.X) + (ty.Y * ty.Y))
             // todo: use tDifference
             let t =
                 // todo: this can be solved with (tx.X ** 2) + (tx.Y ** 2) < (ty.X ** 2) + (ty.Y ** 2)
-                if tDifference < 0f then
+                if MathF.Abs(tDifference) < 0.00000001f then
+                    voxelX <- voxelX + stepX
+                    voxelY <- voxelY + stepY
+                    ty
+                elif tDifference < 0f then
+                    if debug then
+                        JS.console.log ("=========== diff = ", tDifference)
                     voxelX <- voxelX + stepX
                     tx
                 // todo: Cases where tx and ty are roughly equal (a corner is hit)
-                elif tDifference < 0.00000001f then
-                    voxelX <- voxelX + stepX
-                    voxelY <- voxelY + stepY
-                    ty
                 else
                     voxelY <- voxelY + stepY
                     ty
+            // if voxelX = 4 && voxelY = 4 then
+            //     JS.debugger ()
+                // JS.console.log "yo"
             x <- x + t.X
             y <- y + t.Y
             // todo: Can we remove the rounding behavior?
@@ -83,12 +162,13 @@ let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
                 // x <- MathF.Round x
             // if MathF.Abs(MathF.Round(y) - y) < 0.0000001f then
                 // y <- MathF.Round y
-            JS.console.log $"selecting {t}"
-            JS.console.log $"x: {x - t.X} => {x}"
-            JS.console.log $"y: {y - t.Y} => {y}"
-            JS.console.log "=========================="
+            if debug then
+                JS.console.log $"selecting {t}"
+                JS.console.log $"x: {x - t.X} => {x}"
+                JS.console.log $"y: {y - t.Y} => {y}"
+                JS.console.log "=========================="
             // todo: yield next voxel (based on slope)
-            yield (voxelX, voxelY)
+            yield ((voxelX, voxelY), (x, y))
             // yield (x, y)
     }
 

@@ -5,8 +5,14 @@
     <title>PGA F# Tests</title>
 </head>
 <body>
-    <script src="Raycaster.Demo.fs.js" type="module"></script>
+    <script 
+            type="module">
+        import { raycast } from './Raycaster.Demo.fs.js'
+        raycast()
+        // demo.raycast()
+    </script>
     
     <div id="root"></div>
+<!--    <canvas id="3d_canvas"></canvas>-->
 </body>
 </html>
