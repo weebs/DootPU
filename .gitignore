@@ -4,3 +4,7 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 .idea/
+*.fs.js
+*.min.js
+node_modules/
+*.fs.ts
