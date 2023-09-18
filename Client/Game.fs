@@ -238,6 +238,7 @@ let GameWindow wallTextureData =
                 prop.text "Back"
             ]
         ]
+        Html.h4 $"Rotation: {playerRotationInRadians}"
         Html.canvas [
             prop.width 640
             prop.height 480
@@ -246,8 +247,18 @@ let GameWindow wallTextureData =
                 let rect = canvasRef.current.getBoundingClientRect ()
                 let x, y = ev.clientX - rect.left, ev.clientY - rect.top
                 let x = x - (canvasRef.current.width / 2.)
+                let width = canvasRef.current.width |> int
                 // let px, py = x / canvasRef.current.width, y / canvasRef.current.height
                 console.log x
+                console.log playerRotationInRadians
+                let rayDirection = Render.getRaycastAtColumn width playerRotationInRadians (int (JS.Math.round x))
+                console.log ("Ray direction = ", rayDirection)
+                let raycast = findIntersection playerPosition rayDirection level.ContainsKey
+                match raycast with
+                | Some ((voxelX, voxelY), (pointX, pointY)) ->
+                    console.log ("hit voxel", voxelX, ",", voxelY)
+                    console.log ("hit voxel at point", pointX, ",", pointY)
+                | _ -> ()
                 // console.log y
                 // console.log px
                 // console.log py
