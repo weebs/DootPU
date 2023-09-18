@@ -75,6 +75,8 @@ window.onblur <- fun ev ->
         keysPressed[kv.Key] <- false
 // let interval = 7f
 let mutable lastTime = 0.0
+let mutable lastRenderTime = 0.0
+let mutable renderFrameInterval = 22.0
 [<ReactComponent>]
 let GameWindow wallTextureData =
     let screen = Screen(880, 1000)
@@ -165,15 +167,19 @@ let GameWindow wallTextureData =
     let rec loop (time: float) =
         // let deltaTime = interval / 1000.
         // requestAnimationFrame
+        // console.log ("time = ", time)
         let deltaTime = float (time - lastTime) / 1000.
-        console.log ("delta time = ", deltaTime * 1000.)
+        // console.log ("delta time = ", deltaTime * 1000.)
         lastTime <- time
         
         update deltaTime
         
         if not gamePausedRef.current || renderSingleFrame.current then
-            render time
-            renderSingleFrame.current <- false
+            if time - lastRenderTime > renderFrameInterval then
+                // console.log ("last render time = ", time - lastRenderTime)
+                render time
+                renderSingleFrame.current <- false
+                lastRenderTime <- time
         window.requestAnimationFrame loop
         |> ignore
     React.useEffectOnce <| fun () ->
