@@ -291,7 +291,7 @@ type IO() =
         
     
 let createGameRoot () = promise {
-    let! wallTextureData = IO.loadImage "image.png" 128
+    let! wallTextureData = IO.loadImage "image.png" 64
     ReactDOM.createRoot (document.getElementById "root")
     |> fun root -> root.render(GameWindow wallTextureData)
 }
