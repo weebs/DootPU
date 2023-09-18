@@ -34,7 +34,7 @@ let drawShapes () = [
     ]
 ]
 let lines = [
-    Vector2(-10f, -10f), Vector2(1f, 1.001f)
+    Vector2(-10, -10), Vector2(1, 1.001)
     // Vector2(1f, 1.8f), Vector2(-1.2f, -1f)
     
     // Vector2(0f, 0f), Vector2(0.5f, 1f)
@@ -49,7 +49,7 @@ let drawRay lineStart lineDir (screen: Screen) =
     [|
         for ((x, y), _) in items do
             screen.block blockSize (x * blockSize) (y * blockSize)
-        screen.line "pink" (int (lineStart.X * 40f)) (int (lineStart.Y * 40f)) (int (lineStart.X + (lineDir.X * 800000f))) (int (lineStart.Y + (lineDir.Y * 800000f)))
+        screen.line "pink" (int (lineStart.X * 40.)) (int (lineStart.Y * 40.)) (int (lineStart.X + (lineDir.X * 800000.))) (int (lineStart.Y + (lineDir.Y * 800000.)))
     |]
 [<ReactComponent>]
 let SvgDemo () =

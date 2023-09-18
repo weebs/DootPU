@@ -8,22 +8,22 @@ open Fable.Core
 // module System =
     // module Numerics =
     
-// type Vector2(x: float32, y: float32) =
-type Vector2(x: float32, y: float32) =
+// type Vector2(x: float, y: float) =
+type Vector2(x: float, y: float) =
     member this.X = x
     member this.Y = y
-    member this.Length () = MathF.Sqrt(x ** 2f + y ** 2f)
+    member this.Length () = Math.Sqrt(x ** 2. + y ** 2.)
     static member (/) (a: Vector2, b) = Vector2(a.X / b, a.Y / b)
     static member (-) (a: Vector2, b: Vector2) =
         Vector2(a.X - b.X, a.Y - b.Y)
     static member (+) (a: Vector2, b: Vector2) =
         Vector2(a.X + b.X, a.Y + b.Y)
-    static member (*) (a: Vector2, b: float32) =
+    static member (*) (a: Vector2, b: float) =
         // let a = a / a.Length()
         Vector2(a.X * b, a.Y * b)
     member this.Normalized =
         let length = this.Length()
-        if length = 0f then
+        if length = 0. then
             this
         else
             Vector2(x / length, y / length)
@@ -33,27 +33,27 @@ type Vector2(x: float32, y: float32) =
 // #endif
 
 let findIntersection (u: Vector2) (v: Vector2) checkVoxel =
-    let distance value slope =
-        if MathF.Ceiling value = value then float32 (MathF.Sign(slope))
-        elif slope > 0f then MathF.Ceiling(value) - value
-        else MathF.Floor(value) - value
+    let distance (value: float) (slope: float) =
+        if Math.Ceiling value = value then float (Math.Sign(slope))
+        elif slope > 0. then Math.Ceiling(value) - value
+        else Math.Floor(value) - value
     let mutable x = u.X
     let mutable y = u.Y
     let mutable count = 0
-    let stepX = if v.X >= 0f then 1 else -1
-    let stepY = if v.Y >= 0f then 1 else -1
+    let stepX = if v.X >= 0. then 1 else -1
+    let stepY = if v.Y >= 0. then 1 else -1
     let mutable voxelX =
-        // if MathF.Round u.X = u.X && MathF.Round v.X = v.X && v.X < 0f then
-        if MathF.Round u.X = u.X && v.X < 0f then
-            int (MathF.Floor x) - 1
+        // if JS.Math.round u.X = u.X && JS.Math.round v.X = v.X && v.X < 0. then
+        if JS.Math.round u.X = u.X && v.X < 0. then
+            int (Math.Floor x) - 1
         else
-            int (MathF.Floor x)
+            int (Math.Floor x)
     let mutable voxelY =
-        // if MathF.Round u.Y = u.Y && MathF.Round v.Y = v.Y && v.Y < 0f then
-        if MathF.Round u.Y = u.Y && v.Y < 0f then
-            int (MathF.Floor y) - 1
+        // if JS.Math.round u.Y = u.Y && JS.Math.round v.Y = v.Y && v.Y < 0. then
+        if JS.Math.round u.Y = u.Y && v.Y < 0. then
+            int (Math.Floor y) - 1
         else
-            int (MathF.Floor y)
+            int (Math.Floor y)
     let mutable voxelFound = None
     while count < 100000 && voxelFound = None do
         count <- count + 1
@@ -69,11 +69,11 @@ let findIntersection (u: Vector2) (v: Vector2) checkVoxel =
         let tDifference = ((tx.X * tx.X) + (tx.Y * tx.Y)) - ((ty.X * ty.X) + (ty.Y * ty.Y))
         let t =
             // todo: Cases where tx and ty are roughly equal (a corner is hit)
-            if MathF.Abs(tDifference) < 0.00000001f then
+            if Math.Abs(tDifference) < 0.00000001 then
                 voxelX <- voxelX + stepX
                 voxelY <- voxelY + stepY
                 ty
-            elif tDifference < 0f then
+            elif tDifference < 0. then
                 voxelX <- voxelX + stepX
                 tx
             else
@@ -82,10 +82,10 @@ let findIntersection (u: Vector2) (v: Vector2) checkVoxel =
         x <- x + t.X
         y <- y + t.Y
         // todo: Can we remove the rounding behavior?
-        // if MathF.Abs(MathF.Round(x) - x) < 0.0000001f then
-            // x <- MathF.Round x
-        // if MathF.Abs(MathF.Round(y) - y) < 0.0000001f then
-            // y <- MathF.Round y
+        // if Math.Abs(JS.Math.round(x) - x) < 0.0000001f then
+            // x <- JS.Math.round x
+        // if Math.Abs(JS.Math.round(y) - y) < 0.0000001f then
+            // y <- JS.Math.round y
         if checkVoxel (voxelX, voxelY) then    
             voxelFound <- Some ((voxelX, voxelY), (x, y))
     voxelFound
@@ -93,27 +93,27 @@ let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
     let debug = false
     if debug then
         JS.console.log $"findVoxelsAlongRay {u} {v}"
-    let distance value slope =
-        if MathF.Ceiling value = value then float32 (MathF.Sign(slope))
-        elif slope > 0f then MathF.Ceiling(value) - value
-        else MathF.Floor(value) - value
+    let distance (value: float) (slope: float) =
+        if Math.Ceiling value = value then float (Math.Sign(slope))
+        elif slope > 0. then Math.Ceiling(value) - value
+        else Math.Floor(value) - value
     let mutable x = u.X
     let mutable y = u.Y
     let mutable count = 0
-    let stepX = if v.X >= 0f then 1 else -1
-    let stepY = if v.Y >= 0f then 1 else -1
+    let stepX = if v.X >= 0. then 1 else -1
+    let stepY = if v.Y >= 0. then 1 else -1
     let mutable voxelX =
-        // if MathF.Round u.X = u.X && MathF.Round v.X = v.X && v.X < 0f then
-        if MathF.Round u.X = u.X && v.X < 0f then
-            int (MathF.Floor x) - 1
+        // if JS.Math.round u.X = u.X && JS.Math.round v.X = v.X && v.X < 0. then
+        if JS.Math.round u.X = u.X && v.X < 0. then
+            int (Math.Floor x) - 1
         else
-            int (MathF.Floor x)
+            int (Math.Floor x)
     let mutable voxelY =
-        // if MathF.Round u.Y = u.Y && MathF.Round v.Y = v.Y && v.Y < 0f then
-        if MathF.Round u.Y = u.Y && v.Y < 0f then
-            int (MathF.Floor y) - 1
+        // if JS.Math.round u.Y = u.Y && JS.Math.round v.Y = v.Y && v.Y < 0. then
+        if JS.Math.round u.Y = u.Y && v.Y < 0. then
+            int (Math.Floor y) - 1
         else
-            int (MathF.Floor y)
+            int (Math.Floor y)
     seq {
         // todo: yield starting voxel
         // yield (x, y)
@@ -139,11 +139,11 @@ let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
             // todo: use tDifference
             let t =
                 // todo: this can be solved with (tx.X ** 2) + (tx.Y ** 2) < (ty.X ** 2) + (ty.Y ** 2)
-                if MathF.Abs(tDifference) < 0.00000001f then
+                if Math.Abs(tDifference) < 0.00000001 then
                     voxelX <- voxelX + stepX
                     voxelY <- voxelY + stepY
                     ty
-                elif tDifference < 0f then
+                elif tDifference < 0. then
                     if debug then
                         JS.console.log ("=========== diff = ", tDifference)
                     voxelX <- voxelX + stepX
@@ -158,10 +158,10 @@ let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
             x <- x + t.X
             y <- y + t.Y
             // todo: Can we remove the rounding behavior?
-            // if MathF.Abs(MathF.Round(x) - x) < 0.0000001f then
-                // x <- MathF.Round x
-            // if MathF.Abs(MathF.Round(y) - y) < 0.0000001f then
-                // y <- MathF.Round y
+            // if Math.Abs(JS.Math.round(x) - x) < 0.0000001f then
+                // x <- JS.Math.round x
+            // if Math.Abs(JS.Math.round(y) - y) < 0.0000001f then
+                // y <- JS.Math.round y
             if debug then
                 JS.console.log $"selecting {t}"
                 JS.console.log $"x: {x - t.X} => {x}"
@@ -176,46 +176,46 @@ let findVoxelsAlongRay (u: Vector2) (v: Vector2) =
 let initialize (voxelWidth: int) (u: Vector2) (v: Vector2) =
     let vNormalized = v // / v.Length()
     
-    let stepX = if vNormalized.X >= 0f then 1 else -1
-    let stepY = if vNormalized.Y >= 0f then 1 else -1
+    let stepX = if vNormalized.X >= 0. then 1 else -1
+    let stepY = if vNormalized.Y >= 0. then 1 else -1
     // todo: negative values in v
     let tx =
-        if u.X <> MathF.Floor(u.X) then
-            MathF.Ceiling(u.X + float32 stepX) - u.X
+        if u.X <> Math.Floor(u.X) then
+            Math.Ceiling(u.X + float stepX) - u.X
         else
-            MathF.Ceiling(u.X + float32 stepX) - u.X
-    // let tx = MathF.Ceiling(u.X) - u.X
-    // let tx = MathF.Ceiling(u.X + float32 stepX) - u.X
+            Math.Ceiling(u.X + float stepX) - u.X
+    // let tx = Math.Ceiling(u.X) - u.X
+    // let tx = Math.Ceiling(u.X + float stepX) - u.X
     // todo: t = (u.X + stepX) / u.X
-    let tMaxX = MathF.Sqrt((tx ** 2f) + (((vNormalized.Y / vNormalized.X) * tx) ** 2f))
-    // let ty = MathF.Ceiling(u.Y) - u.Y
-    // let ty = MathF.Floor(u.Y + float32 stepY) - u.Y
+    let tMaxX = Math.Sqrt((tx ** 2.) + (((vNormalized.Y / vNormalized.X) * tx) ** 2.))
+    // let ty = Math.Ceiling(u.Y) - u.Y
+    // let ty = Math.Floor(u.Y + float stepY) - u.Y
     let ty =
-        if u.Y <> MathF.Floor(u.Y) then
+        if u.Y <> Math.Floor(u.Y) then
             // Works on positive slope from non-integer point
-            // MathF.Floor(u.Y + float32 stepY) - u.Y
+            // Math.Floor(u.Y + float stepY) - u.Y
             // Works on negative slope from non-integer point
-            MathF.Ceiling(u.Y + float32 stepY) - u.Y
+            Math.Ceiling(u.Y + float stepY) - u.Y
         else
-            MathF.Ceiling(u.Y) - u.Y
-    // let ty = MathF.Ceiling(u.Y) - u.Y
-    let tMaxY = MathF.Sqrt((ty ** 2f) + (((vNormalized.X / vNormalized.Y) * ty) ** 2f))
+            Math.Ceiling(u.Y) - u.Y
+    // let ty = Math.Ceiling(u.Y) - u.Y
+    let tMaxY = Math.Sqrt((ty ** 2.) + (((vNormalized.X / vNormalized.Y) * ty) ** 2.))
     
-    // let tMaxX = float32 <| (int (MathF.Floor(u.X)) + stepX) * voxelWidth
-    // let tMaxY = float32 <| (int (MathF.Floor(u.Y)) + stepY) * voxelWidth
+    // let tMaxX = float <| (int (Math.Floor(u.X)) + stepX) * voxelWidth
+    // let tMaxY = float <| (int (Math.Floor(u.Y)) + stepY) * voxelWidth
     
-    let Frac f1 = f1 - MathF.Floor f1
-        // if f1 > 0f then
-        //     f1 - MathF.Floor(f1)
+    let Frac (f1: float) = f1 - Math.Floor f1
+        // if f1 > 0. then
+        //     f1 - Math.Floor(f1)
         // else
-        //     f1 - MathF.Floor(f1)
-    let voxelWidth = float32 voxelWidth
+        //     f1 - Math.Floor(f1)
+    let voxelWidth = float voxelWidth
     {|
         stepX = stepX
         stepY = stepY
         // todo: negative values in v
-        deltaX = voxelWidth / vNormalized.X * float32 stepX
-        deltaY = voxelWidth / vNormalized.Y * float32 stepY
+        deltaX = voxelWidth / vNormalized.X * float stepX
+        deltaY = voxelWidth / vNormalized.Y * float stepY
         tMaxX = tMaxX
         tMaxY = tMaxY
         // todo: Stackoverflow
@@ -225,8 +225,8 @@ let initialize (voxelWidth: int) (u: Vector2) (v: Vector2) =
         // tMaxX = (v.X - u.X) * (1f - Frac(u.X / 1f))
         // tMaxY = (v.Y - u.Y) * (1f - Frac(u.Y / 1f))
         
-        // tMaxX = (1f - (u.X - (MathF.Floor u.X))) / v.X
-        // tMaxY = (1f - (u.Y - (MathF.Floor u.Y))) / v.Y
+        // tMaxX = (1f - (u.X - (Math.Floor u.X))) / v.X
+        // tMaxY = (1f - (u.Y - (Math.Floor u.Y))) / v.Y
         // tMaxY = tMaxY
     
         
@@ -242,8 +242,8 @@ let traverseRay voxelWidth (origin: Vector2) (dir: Vector2) =
     JS.console.log ("tMaxY = ", tMaxY)
     JS.console.log ("deltaX = ", info.deltaX)
     JS.console.log ("deltaY = ", info.deltaY)
-    let mutable x = int (MathF.Floor origin.X)
-    let mutable y = int (MathF.Floor origin.Y)
+    let mutable x = int (Math.Floor origin.X)
+    let mutable y = int (Math.Floor origin.Y)
     let yOffset = if info.stepY < 0 then -1 else 0
     let xOffset = if info.stepX < 0 then -1 else 0
     let mutable count = 0
@@ -252,7 +252,7 @@ let traverseRay voxelWidth (origin: Vector2) (dir: Vector2) =
         yield (x + xOffset, y + yOffset)
         while count < 10000 do
             count <- count + 1
-            // if dir.X < 0f && dir.Y < 0f then
+            // if dir.X < 0. && dir.Y < 0. then
             //     if tMaxY + info.deltaY > tMaxX + info.deltaX then
             //     // if tMaxX < tMaxY then
             //         JS.console.log $"    tMaxY <- {tMaxY} + {info.deltaY}"

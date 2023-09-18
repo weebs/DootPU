@@ -5,17 +5,20 @@ open Doot.Maths.Voxel.Traversal
 open Dootverse.Client
 open Dootverse.Client.Svg
 open Fable.Core
-open Fable.Core.JS
+// open Fable.Core.JS
 open Feliz
 open Browser
 open Raycaster_Demo
 open Dootverse.Game
+open Dootverse
+open Dootverse.Models
+open Dootverse.Render
 
 
-let (x, y) = (0f, 10f)
-let (x1, y1) = (10f, 10f)
+let (x, y) = (0., 10.)
+let (x1, y1) = (10., 10.)
 
-let theta = MathF.Tau / 4f
+let theta = System.Math.Tau / 4.
 // let theta = 0f
 
 
@@ -26,9 +29,9 @@ type svg with
 [<ReactComponent>]
 let RotatePoint () =
     let screen = Screen(400, 400)
-    let int = MathF.Round >> int
-    let (rx, ry) = rotate (x, y) theta
-    let (rx1, ry1) = rotate (x1, y1) theta
+    let int = JS.Math.round >> int
+    let (rx, ry) = Render.rotate (x, y) theta
+    let (rx1, ry1) = Render.rotate (x1, y1) theta
 
     console.log (x, y)
     console.log (x1, y1)
@@ -53,18 +56,18 @@ let RotatePoint () =
 [<ReactComponent>]
 let SpriteScaling () =
     let columnRelativePosition voxel pt =
-        if MathF.Abs(pt.X - voxel.X) > MathF.Abs(pt.Y - voxel.Y) then
-            if pt.X > voxel.X + 0.5f then Left, 1f - (pt.Y - voxel.Y)
+        if Math.Abs(pt.X - voxel.X) > Math.Abs(pt.Y - voxel.Y) then
+            if pt.X > voxel.X + 0.5 then Left, 1. - (pt.Y - voxel.Y)
             else Right, pt.Y - voxel.Y
         else
-            if pt.Y > voxel.Y + 0.5f then Up, 1f - (pt.X - voxel.X)
+            if pt.Y > voxel.Y + 0.5 then Up, 1. - (pt.X - voxel.X)
             else Down, pt.X - voxel.X
             
     let pixelsForColumn (imageData: ImageData) n size =
-        let x = MathF.Round(MathF.Min(float32 imageData.width * n, float32 imageData.width)) |> int
+        let x = JS.Math.round(Math.Min(imageData.width * n, imageData.width)) |> int
         [|
             for i in 0..size - 1 do
-                let y = int (System.Math.Round imageData.height * (float i / float size))
+                let y = int (JS.Math.round imageData.height * (float i / float size))
                 for n in 0..3 do
                     yield imageData.data[(((y * int imageData.width) + x) * 4) + n]
         |]
@@ -91,8 +94,8 @@ let SpriteScaling () =
             let context2d =  scaledCanvasRef.current.Value.getContext_2d()
             // context2d.clearRect(0, 0, 400, 400)
             for i in 1..32 do
-                let scaledColumn = pixelsForColumn data (float32 i * 0.02f) 32
-                let columnData = ImageData.Create(Constructors.Uint8ClampedArray.Create scaledColumn :> obj :?> _, 1, 32)
+                let scaledColumn = pixelsForColumn data (float i * 0.02) 32
+                let columnData = ImageData.Create(JS.Constructors.Uint8ClampedArray.Create scaledColumn :> obj :?> _, 1, 32)
                 console.log columnData
                 context2d.putImageData(columnData, i, 0)
             // canvasRef.current.Value.getContext_2d().drawImage(U3.Case1 element, 100, 100)
@@ -120,7 +123,7 @@ let Header () =
     Html.div [
         Html.h3 $"Files = {localStorage.length}"
         Html.ul [
-            for key in Object.keys localStorage do
+            for key in JS.Object.keys localStorage do
                 console.log (localStorage.Item key)
                 Html.li (localStorage.Item key)
         ]
@@ -136,6 +139,6 @@ let App () =
 let run () =
     localStorage["files"] <- "yo!"
     // localStorage.clear()
-    screenColumns 8 theta (Vector2(0f, 0f)) |> Seq.iter (printfn "%A")
+    screenColumns 8 theta (Vector2(0., 0.)) |> Seq.iter (printfn "%A")
     document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (App ())
 // console.log ("distance (0, 2) from (0, 1) -> (1, 1) = ", distanceFromLine (Vector2(0f, 1f)) (Vector2(1f, 1f)) (Vector2(8f, 11f)))

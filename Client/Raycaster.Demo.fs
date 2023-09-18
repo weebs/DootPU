@@ -13,19 +13,19 @@ open Doot.Maths.Voxel.Traversal
 
 // todo: size scaling
 let traverseRay size (start: Vector2) (ray: Vector2) =
-    findVoxelsAlongRay (start / float32 size) (ray / float32 size)
+    findVoxelsAlongRay (start / float size) (ray / float size)
 
 let drawMap width height (grid: Map<int * int, string>) =
     let arr = JS.Constructors.Uint8ClampedArray.Create (width * height * 4)
-    let start = Vector2(0f, 0f)
+    let start = Vector2(0., 0.)
     console.log ("start = ")
     console.log start
-    let dir = Vector2(1f, 1f)
+    let dir = Vector2(1., 1.)
     let rays = seq {
         for i in -320 / 2..-1 do
-            yield (Vector2(0f, 0f), Vector2(float32 i / 160f, 1f))
+            yield (Vector2(0., 0.), Vector2(float i / 160., 1.))
         for i in 1..320 / 2 do
-            yield (Vector2(0f, 0f), Vector2(float32 i / 160f, 1f))
+            yield (Vector2(0., 0.), Vector2(float i / 160., 1.))
     }
     seq {
         for (start, ray) in rays do
@@ -67,20 +67,20 @@ let RaycastDemo () =
     let canvas, setCanvas = React.useState null
     console.log ("canvas = ", box canvas)
     let arr = JS.Constructors.Uint8ClampedArray.Create (width * height * 4)
-    let start = Vector2(0f, 0f)
+    let start = Vector2(0., 0.)
     console.log ("start = ")
     console.log start
-    let dir = Vector2(1f, 1f)
+    let dir = Vector2(1., 1.)
     let rays = seq {
         // for i in -320 / 2..-1 do
-        //     yield (Vector2(0f, 0f), Vector2(float32 i / 160f, 1f))
+        //     yield (Vector2(0., 0.), Vector2(float i / 160., 1.))
         // for i in 1..320 / 2 do
-        //     yield (Vector2(0f, 0f), Vector2(float32 i / 160f, 1f))
-        // yield (Vector2(0f, 0f), Vector2(0.1f, 0.2f))
-        yield (Vector2(0f, 0f), Vector2(0.22f, 1f))
-        // yield (Vector2(0f, 0f), Vector2(0.4f, 1f))
-        // yield (Vector2(0f, 0f), Vector2(0.888f, 1f))
-        // yield (Vector2(0f, 0f), Vector2(-1f, 1f))
+        //     yield (Vector2(0., 0.), Vector2(float i / 160., 1.))
+        // yield (Vector2(0., 0.), Vector2(0.1., 0.2f))
+        yield (Vector2(0., 0.), Vector2(0.22, 1.))
+        // yield (Vector2(0., 0.), Vector2(0.4f, 1.))
+        // yield (Vector2(0., 0.), Vector2(0.888f, 1.))
+        // yield (Vector2(0., 0.), Vector2(-1., 1.))
     }
     
     // drawMap width height map
@@ -124,7 +124,7 @@ let RaycastDemo () =
                     |> fun (x, y) -> Svg.line [
                         svg.stroke (map[(x, y)])
                         let (x, y) = toSvgPoint x y
-                        let ray: Vector2 = ray * 40f
+                        let ray: Vector2 = ray * 40.
                         let (x, y) = toSvgPoint (int ray.X) (int ray.Y)
                         let cx, cy = toSvgPoint 0 0
                         svg.x1 cx

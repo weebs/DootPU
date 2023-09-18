@@ -26,13 +26,15 @@
         <Compile Include="../Wad/Reader.fs" />
         <Compile Include="Rotations.fs" />
         <Compile Include="Svg.fs" />
-      <Content Include="*.html" />
-      <Compile Include="DoomGame.fs" />
-      <Compile Include="Raycaster.Demo.fs" />
-      <Compile Include="Lib\MVU.fs" />
-      <Compile Include="Svg.Demo.fs" />
-      <Compile Include="Game.fs" />
-      <Compile Include="Tests\Page.fs" />
+        <Content Include="*.html" />
+        <Compile Include="DoomGame.fs" />
+        <Compile Include="Raycaster.Demo.fs" />
+        <Compile Include="Models.fs" />
+        <Compile Include="Lib\MVU.fs" />
+        <Compile Include="Svg.Demo.fs" />
+        <Compile Include="Render/Render.fs" />
+        <Compile Include="Game.fs" />
+        <Compile Include="Tests\Page.fs" />
     </ItemGroup>
 
 </Project>
