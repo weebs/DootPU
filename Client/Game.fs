@@ -63,10 +63,16 @@ let useRefState (state: 'a) =
         stateRef.current <- state)
 let mutable playerPosition = Vector2(2., 0.)
 let keysPressed = Dictionary<string, bool>()
+let keysJustPressed = Dictionary<string, bool>()
 let isKeyPressed key =
     if keysPressed.ContainsKey key then keysPressed[key] else false
+let isKeyJustPressed key =
+    if keysJustPressed.ContainsKey key then keysJustPressed[key] else false
 window.onkeydown <- fun key ->
     // console.log key
+    let c = key.key.ToLower()
+    if not <| isKeyPressed c then
+        keysJustPressed[c] <- true
     keysPressed[key.key.ToLower()] <- true
 window.onkeyup <- fun key ->
     keysPressed[key.key.ToLower()] <- false
@@ -76,7 +82,7 @@ window.onblur <- fun ev ->
 // let interval = 7f
 let mutable lastTime = 0.0
 let mutable lastRenderTime = 0.0
-let mutable renderFrameInterval = 22.0
+let mutable renderFrameInterval = 25.0
 [<ReactComponent>]
 let GameWindow wallTextureData =
     let screen = Screen(880, 1000)
@@ -152,6 +158,9 @@ let GameWindow wallTextureData =
         if mapData.ContainsKey (int (Math.Floor playerPosition.X), int (Math.Floor playerPosition.Y)) then
             // playerPosition <- Vector2(0., 0.)
             playerPosition <- originalPosition
+        
+        if isKeyJustPressed "p" then
+            setGamePaused (not gamePausedRef.current)
     let render (time: float) : unit =
     // window.setInterval ((fun () ->
         let canvas = canvasRef.current
@@ -173,6 +182,9 @@ let GameWindow wallTextureData =
         lastTime <- time
         
         update deltaTime
+        // Needs to be called after every update
+        for kv in keysJustPressed do
+            keysJustPressed[kv.Key] <- false
         
         if not gamePausedRef.current || renderSingleFrame.current then
             if time - lastRenderTime > renderFrameInterval then
