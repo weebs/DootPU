@@ -9,6 +9,7 @@
     <ItemGroup>
         
         <Content Include="Library.Code.fs"/>
+        <Compile Include="PGA2D.fs" />
         <Compile Include="Library.fs"/>
         <Compile Include="Voxel.Traversal.fs" />
         <PackageReference Include="Fable.Core" Version="4.0.0" />
