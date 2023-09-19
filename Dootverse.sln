@@ -10,6 +10,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Doot.Tests", "Doot.Tests\Do
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Client", "Client\Client.fsproj", "{F4601DCD-E801-473E-9A13-66AB81B92005}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Bindings", "..\bindings\Bindings.fsproj", "{BF1E429A-281C-49B7-BCAA-4155C1856983}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{F4601DCD-E801-473E-9A13-66AB81B92005}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4601DCD-E801-473E-9A13-66AB81B92005}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4601DCD-E801-473E-9A13-66AB81B92005}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
