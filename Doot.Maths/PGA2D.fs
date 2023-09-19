@@ -311,8 +311,8 @@ type PGA2D(?f: float32, ?idx: int) =
     
     static member point (x, y) = !!!(PGA2D.e0 + x * PGA2D.e1 + y * PGA2D.e2)
     static member direction (x: float32, y: float32) = (PGA2D.e012 + x * PGA2D.e01 + y * PGA2D.e20)
-    member this.X = this[4]
-    member this.Y = this[5]
+    member this.X = this[4] / this[6]
+    member this.Y = this[5] / this[6]
     
     override this.ToString() =
         let sb = StringBuilder()
