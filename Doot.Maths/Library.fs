@@ -17,8 +17,8 @@ type PGA3D(?f: float32, ?idx: int) =
         | Some value, Some index ->
             _mVec[index] <- value
         | _ -> ()
-    let f = defaultArg f 1f
-    let idx = defaultArg idx 1
+    let f = defaultArg f 0f
+    let idx = defaultArg idx 0
 
     member this.Item with get index = _mVec[index] and set index value = _mVec[index] <- value
     
