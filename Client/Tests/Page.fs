@@ -20,7 +20,7 @@ let (x1, y1) = (10., 10.)
 
 let theta = System.Math.Tau / 4.
 // let theta = 0f
-
+let RAPIER: RAPIER.IExports = JsInterop.importAll "@dimforge/rapier3d-compat"
 
 type svg with
     static member cx x = svg.cx (int x)
@@ -135,10 +135,22 @@ let App () =
         Header ()
         SpriteScaling ()
     ]
-    
-let run () =
+
+let runTestApp () =
+    document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (App ())
+open type PGA.PGA2D
+let run () = promise {
+    do! RAPIER.init ()
+    let world = RAPIER.World.Create (RAPIER.Vector3.Create (0, -9.81, 0))
+    let pt = !!!(e0 + 2f * e1 + 4f * e2)
+    let dir = direction (4.2f, 1f)
+    console.log pt
+    console.log dir
+    console.log (pt + dir)
+    console.log world
     localStorage["files"] <- "yo!"
     // localStorage.clear()
-    screenColumns 8 theta (Vector2(0., 0.)) |> Seq.iter (printfn "%A")
-    document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (App ())
+    screenColumns 8 theta (Vector2(0., 0.))
+    |> Seq.iter (printfn "%A")
+}
 // console.log ("distance (0, 2) from (0, 1) -> (1, 1) = ", distanceFromLine (Vector2(0f, 1f)) (Vector2(1f, 1f)) (Vector2(8f, 11f)))

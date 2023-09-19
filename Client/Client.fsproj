@@ -7,6 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\bindings\Bindings.fsproj" />
         <ProjectReference Include="..\Doot.Maths\Doot.Maths.fsproj" />
     </ItemGroup>
 
@@ -23,10 +24,10 @@
         <PackageReference Include="Feliz.UseElmish" />
     </ItemGroup>
     <ItemGroup>
+        <Content Include="package.json" />
         <Compile Include="../Wad/Reader.fs" />
         <Compile Include="Rotations.fs" />
         <Compile Include="Svg.fs" />
-        <Content Include="*.html" />
         <Compile Include="DoomGame.fs" />
         <Compile Include="Raycaster.Demo.fs" />
         <Compile Include="Models.fs" />
@@ -35,6 +36,9 @@
         <Compile Include="Render/Render.fs" />
         <Compile Include="Game.fs" />
         <Compile Include="Tests\Page.fs" />
+        <Content Include="Tests\audio.html" />
+        <TypeScriptCompile Include="Tests\audio.ts" />
+        <Content Include="*.html" />
     </ItemGroup>
 
 </Project>
