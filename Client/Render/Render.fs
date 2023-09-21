@@ -11,10 +11,58 @@ open Dootverse.Models
 
 type BoxFace = Right | Left | Up | Down
 
+open type PGA.PGA3D
 
+// Source: https://academo.org/demos/rotation-about-point/
+let rotatePoint2d pt radians =
+    let (x, y) = pt
+    (x * Math.Cos radians - y * Math.Sin radians,
+     y * Math.Cos radians + x * Math.Sin radians)
 // todo: size scaling
 let traverseRay size (start: Vector2) (ray: Vector2) =
     findVoxelsAlongRay (start / float size) (ray / float size)
+let cartesianToScreen screenWidth screenHeight x y =
+    screenWidth / 2 + x, screenHeight / 2 - y
+//// Returns the offset (in cartesian coordinates) from the center of the camera from projecting
+/// a world coordinate onto the camera plane
+let worldCoordinatesToScreenCoordinates screen (cameraPosition: float2f) cameraRotation (position: float3f) =
+    // todo: Opposite rotation signs for GA and rotatePoint2d
+    let cameraRotation = cameraRotation
+    // Player position and rotation
+    // Y = 0.5f is that the camera sits at the midpoint of wall heights
+    let pt = point(float32 cameraPosition.X, 0.5f, float32 cameraPosition.Y)
+    let r = rotor(cameraRotation, point(0f, 1f, 0f) &&& point(0f, 0f, 0f))
+    
+    let initCameraOrigin = point(0f, 0f, 1f)
+    let initCameraRight = point(1f, 0f, 1f)
+    // Rotated camera plane
+    let cameraOrigin = translate(r * initCameraOrigin * ~~~r, pt.AsDirection)
+    let cameraRight = translate(r * initCameraRight * ~~~r, pt.AsDirection)
+    let cameraPlane =
+        cameraOrigin &&& cameraRight &&&
+        translate(cameraOrigin, direction(0f, 1f, 0f))
+    console.log ("camera origin = ", cameraOrigin.Vector)
+        
+    let cameraEye = point(float32 cameraPosition.X, 0.5f, float32 cameraPosition.Y)
+    let worldPosition = point(float32 position.X, float32 position.Y, float32 position.Z)
+    // Ray from the camera eye to the world position
+    let ray = cameraEye &&& worldPosition
+    let pointOnPlane = ray ^^^ cameraPlane
+    // The relative offset between the camera plane's center and the pixel intersected with the
+    // line between the camera eye and the position
+    console.log ("point on plane = ", pointOnPlane.Vector)
+    let offset =
+        let pointOnPlane = ~~~r * (pointOnPlane.normalized() - pt.AsDirection) * r
+        console.log ("point on initial plane = ", pointOnPlane.Vector)
+        // todo: Check
+        // todo: X shouldn't be -0.5f
+        let initTopLeft = translate(initCameraOrigin, direction(-0.5f, 0.5f, 0f))
+        console.log ("initTopLeft =", initTopLeft.Vector)
+        // let cameraTopLeft = rotate(initTopLeft, r)
+        // pointOnPlane.normalized() - ((~~~r * cameraOrigin * r) + direction(0f, 0.0f, 0f)).AsDirection
+        pointOnPlane.normalized() - initCameraOrigin.AsDirection
+    let distanceFromPlane = distance(worldPosition, cameraPlane)
+    offset, distanceFromPlane
 
 let drawMap width height (grid: Map<int * int, string>) =
     let arr = JS.Constructors.Uint8ClampedArray.Create (width * height * 4)
@@ -42,17 +90,12 @@ let drawMap width height (grid: Map<int * int, string>) =
             //     console.log (coords, " => ", grid[coords])
             //     )
     }
-// Source: https://academo.org/demos/rotation-about-point/
-let rotate pt radians =
-    let (x, y) = pt
-    (x * Math.Cos radians - y * Math.Sin radians,
-     y * Math.Cos radians + x * Math.Sin radians)
 // let mutable screenWidth = 0
 let mutable screenRaycastLines = Array.zeroCreate<float> 0
 let mutable screenRaycasts = Array.zeroCreate<Vector2> 0
 let getRaycastAtColumn width rotationRadians column =
-    let (rx, ry) = rotate (0, 1) rotationRadians
-    let (rx1, ry1) = rotate (1, 1) rotationRadians
+    let (rx, ry) = rotatePoint2d (0, 1) rotationRadians
+    let (rx1, ry1) = rotatePoint2d (1, 1) rotationRadians
     let (a, b) = (rx1 - rx, ry1 - ry)
     let magnitude = Math.Sqrt((a * a) + (b * b))
     let lineSlope = (a / magnitude, b / magnitude)
@@ -64,8 +107,8 @@ let screenColumns width rotationRadians (offset: Vector2) =
     let y = 1.0
     let x1 = 1.0
     let y1 = 1.0
-    let (rx, ry) = rotate (0, 1) rotationRadians
-    let (rx1, ry1) = rotate (1, 1) rotationRadians
+    let (rx, ry) = rotatePoint2d (0, 1) rotationRadians
+    let (rx1, ry1) = rotatePoint2d (1, 1) rotationRadians
     let (a, b) = (rx1 - rx, ry1 - ry)
     // console.log ("theta = ", rotationRadians)
     // console.log ("a, b = ", (a, b))
@@ -97,17 +140,18 @@ let distanceFromLine (lineA: Vector2) (lineB: Vector2) (pt: Vector2) =
     let numerator = Math.Abs(((lineB.X - lineA.X) * (lineA.Y - pt.Y)) - ((lineA.X - pt.X) * (lineB.Y - lineA.Y)))
     let denom = Math.Sqrt((lineB.X - lineA.X) ** 2.0 + (lineB.Y - lineA.Y) ** 2.0)
     numerator / denom
+/// Produces a line perpindicular to the forward direction of the position+rotation (offset by 1 unit)
 let cameraLine rotation position =
     let x = 0.
     let y = 1.0
     let x1 = 1.0
     let y1 = 1.0
-    let cameraOrigin = Vector2 (rotate (x, y) rotation)
-    let cameraFirstColumn = Vector2(rotate (x1, y1) rotation)
+    let cameraOrigin = Vector2 (rotatePoint2d (x, y) rotation)
+    let cameraFirstColumn = Vector2(rotatePoint2d (x1, y1) rotation)
     cameraOrigin + position, cameraFirstColumn + position
     // let (a, b) = (rx1 - rx, ry1 - ry)
 let rotateVector (rotation: float) (dir: Vector2) =
-    Vector2 (rotate (dir.X, dir.Y) rotation)
+    Vector2 (rotatePoint2d (dir.X, dir.Y) rotation)
     
 let columnRelativePosition voxel pt : _ * float =
     // if Math.Abs(pt.X - voxel.X) > Math.Abs(pt.Y - voxel.Y) then
@@ -154,7 +198,58 @@ let pixelsForColumn (imageData: ImageData) n size =
     
 let mutable buffer = Unchecked.defaultof<JS.Uint8ClampedArray>
 let skyboxColor = (0uy, 24uy, 50uy)
-
+let scaleImage (scale: int) (img: ImageData) : ImageData =
+    let buffer = ImageData.Create (img.width * float scale, img.height * float scale)
+    for y in 0..int buffer.height - 1 do
+        for x in 0..int buffer.width - 1 do
+            let imageOffset = (y / scale * int img.width + x / scale) * 4
+            let offset = (y * int buffer.width + x) * 4
+            for i in 1..4 do
+                buffer.data[offset + i - 1] <- img.data[imageOffset + i - 1]
+            // for yi in 0..scale - 1 do
+            //     for xi in 0..scale - 1 do
+            //         let offset = ((y + yi) * int buffer.width + (x + xi)) * 4
+            //         for i in 1..4 do
+            //             buffer.data[offset + i - 1] <- img.data[imageOffset + i - 1]
+    buffer
+// todo: what about when the image is out of bounds?
+let imgRgba (img: ImageData) offset =
+    img.data[offset],
+    img.data[offset + 1],
+    img.data[offset + 2],
+    img.data[offset + 3]
+let writeRgbToImage (img: ImageData) offset (r, g, b) =
+    img.data[offset] <- r
+    img.data[offset + 1] <- g
+    img.data[offset + 2] <- b
+let writeRgbaToImage (img: ImageData) offset (r, g, b, a) =
+    img.data[offset] <- r
+    img.data[offset + 1] <- g
+    img.data[offset + 2] <- b
+    img.data[offset + 3] <- a
+// todo: what about when the image is out of bounds?
+let drawRectangle (x: int) (y: int) (width: int) (height: int) (color: int * int -> byte * byte * byte * byte) (buffer: ImageData) =
+    for y in y..y + height - 1 do
+        if y < int buffer.height && y > 0 then
+            for x in x..x + width - 1 do
+                if x < int buffer.width && x > 0 then
+                    let color = color (x, y)
+                    let offset = (y * int buffer.width + x) * 4
+                    writeRgbaToImage buffer offset color
+let drawImage (img: ImageData) (position: float2f) (buffer: ImageData) =
+    let position = {
+        X = if position.X < 0 then buffer.width + position.X else position.X
+        Y = if position.Y < 0 then buffer.height + position.Y else position.Y
+    }
+    for y in 0..int img.height - 1 do
+        for x in 0..int img.width - 1 do
+            if x + int position.X < int buffer.width then
+                let offset = (y * int img.width + x) * 4
+                let bufferOffset = ((y + int position.Y) * int buffer.width + (x + int position.X)) * 4
+                let (r, g, b, a) = imgRgba img offset
+                if (r, g, b, a) <> (255uy, 255uy, 255uy, 0uy) then // && a <> 0uy then
+                    for i in 1..4 do
+                        buffer.data[bufferOffset + i - 1] <- img.data[offset + i - 1]
 let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>) position rotation =
     if buffer = Unchecked.defaultof<_> then
         buffer <- JS.Constructors.Uint8ClampedArray.Create (width * height * 4)
@@ -219,11 +314,7 @@ let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>
                 buffer[offset + 2] <- b
                 buffer[offset + 3] <- 255uy
                 
-                let (r, g, b, a) = 
-                    wallTextureData.data[textureDataOffset],
-                    wallTextureData.data[textureDataOffset + 1],
-                    wallTextureData.data[textureDataOffset + 2],
-                    wallTextureData.data[textureDataOffset + 3]
+                let (r, g, b, a) = imgRgba wallTextureData textureDataOffset
                 if (r, g, b) <> (255uy, 255uy, 255uy) then
                     buffer[offset] <- r
                     buffer[offset + 1] <- g
