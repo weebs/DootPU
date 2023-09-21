@@ -62,6 +62,11 @@ let worldCoordinatesToScreenCoordinates screen (cameraPosition: float2f) cameraR
         // pointOnPlane.normalized() - ((~~~r * cameraOrigin * r) + direction(0f, 0.0f, 0f)).AsDirection
         pointOnPlane.normalized() - initCameraOrigin.AsDirection
     let distanceFromPlane = distance(worldPosition, cameraPlane)
+    let rotatedPosition = rotate(worldPosition, rotor(float32 Math.Tau - cameraRotation, point(0f, 1f, 0f) &&& point(0f, 0f, 0f)))
+    console.log ("rotatedPosition =", rotatedPosition.Vector)
+    // if rotatedPosition.Z < cameraOrigin.Z then
+        // offset, -distanceFromPlane
+    // else
     offset, distanceFromPlane
 
 let drawMap width height (grid: Map<int * int, string>) =
@@ -227,7 +232,6 @@ let writeRgbaToImage (img: ImageData) offset (r, g, b, a) =
     img.data[offset + 1] <- g
     img.data[offset + 2] <- b
     img.data[offset + 3] <- a
-// todo: what about when the image is out of bounds?
 let drawRectangle (x: int) (y: int) (width: int) (height: int) (color: int * int -> byte * byte * byte * byte) (buffer: ImageData) =
     for y in y..y + height - 1 do
         if y < int buffer.height && y > 0 then
@@ -236,6 +240,24 @@ let drawRectangle (x: int) (y: int) (width: int) (height: int) (color: int * int
                     let color = color (x, y)
                     let offset = (y * int buffer.width + x) * 4
                     writeRgbaToImage buffer offset color
+let drawScaledSprite (img: ImageData) (position: int * int) (scale: float) (buffer: ImageData) =
+    let imgWidth = JS.Math.round(scale * img.width) |> int
+    let imgHeight = JS.Math.round(scale * img.height) |> int
+    let (pX, pY) = position
+    for y in pY..pY + imgHeight - 1 do
+        if y < int buffer.height && y > 0 then
+            for x in pX..pX + imgWidth - 1 do
+                if x < int buffer.width && x > 0 then
+                    let nearestY = (float (y - pY) / float imgHeight) * img.height |> JS.Math.round |> int
+                    let nearestX = (float (x - pX) / float imgWidth) * img.width |> JS.Math.round |> int
+                    let offset = (nearestY * int img.width + nearestX) * 4
+                    let bufferOffset = (y * int buffer.width + x) * 4
+                    let (r, g, b, a) = imgRgba img offset
+                    if a <> 0uy then
+                        writeRgbaToImage buffer bufferOffset (imgRgba img offset)
+                        // for i in 0..3 do
+                        //     buffer.data[bufferOffset + i] <- img.data[offset + i]
+// todo: what about when the image is out of bounds?
 let drawImage (img: ImageData) (position: float2f) (buffer: ImageData) =
     let position = {
         X = if position.X < 0 then buffer.width + position.X else position.X

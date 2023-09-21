@@ -6,7 +6,9 @@ open Dootverse.Client.Svg
 open Browser
 open Fable.Core
 open Feliz
-open Doot.Maths
+
+// open Doot.Maths
+
 open Dootverse.Models
 open Doot.Maths.Voxel.Traversal
 open Dootverse
@@ -146,7 +148,7 @@ let mapData' = Map.ofArray [|
 |]
 
 
-let r = System.Random()
+// let r = System.Random() TODO didn't produce random numbers?
 let nextInt max = JS.Math.round(JS.Math.random() * float max) |> int
 let mapData = Map.ofArray [|
     let mapSize = mapSize * 10
@@ -155,15 +157,15 @@ let mapData = Map.ofArray [|
         (i, -mapSize), "pink"
         (-mapSize , i), "pink"
         (mapSize, i), "pink"
-    for i in 1..80 do
+    for _ in 1..80 do
         let x = nextInt (mapSize * 2) - mapSize
         let y = nextInt (mapSize * 2) - mapSize
         (x, y), "green"
-    for i in 1..80 do
+    for _ in 1..80 do
         let x = nextInt (mapSize * 2) - mapSize
         let y = nextInt (mapSize * 2) - mapSize
         (x, y), "blue"
-    for i in 1..80 do
+    for _ in 1..80 do
         let x = nextInt (mapSize * 2) - mapSize
         let y = nextInt (mapSize * 2) - mapSize
         (x, y), "orange"
@@ -215,7 +217,7 @@ let GameWindow (game: Models.Game) =
     // todo: 1, 7 also has errors
     // todo: (0.8999999985098839, -7) with cube at (8, 8) (1 right from 1, -7)
     // let mutable playerRotationInRadians = 0.
-    let playerRotation, setPlayerRotation = useRefState 0.0 //(Math.Tau / 4.0)
+    let playerRotation, setPlayerRotation = useRefState (Math.Tau / 2.0) //(Math.Tau / 4.0)
     // let focalLength = 0.5
     // let screenCasts = seq {
     //     let rayCount = 320
@@ -237,7 +239,7 @@ let GameWindow (game: Models.Game) =
     let renderSingleFrame = React.useRef true
     
     let playerPosition, setPlayerPosition =
-        useRefState (Vector2(2.0, 2.0))
+        useRefState (Vector2(2.0, 8.0))
     
     
     // todo: Duplicating canvas to save state
@@ -311,14 +313,30 @@ let GameWindow (game: Models.Game) =
         let canvasData = ImageData.Create (img :> obj :?> _, int canvas.width, int canvas.height)
         
         // Draw item in bottom right of screen
-        Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
+        // Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
         
         for (position, asset) in gameState.current.entities do
-            let entityPoint = { X = position.X; Y = 0.4; Z = position.Y }
+            let (Image sprite) = asset
+            let entityPoint = { X = position.X; Y = 1.4; Z = position.Y }
+            let n =
+                rotate(point(0f, 0f, 1f), rotor(float32 playerRotation.current, point(0f, 1f, 0f) &&& point(0f, 0f, 0f)))
+                    .Vector
+                    |> fun (x, y, z) -> { X = float x; Y = float y; Z = float z }
             let playerPt = { X = playerPosition.current.X; Y = playerPosition.current.Y }
-            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 playerRotation.current) entityPoint
+            let cameraEyePt = { X = playerPt.X - n.X; Y = playerPt.Y - n.Z }
+            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
-            if MathF.Abs(offsetZ) < 0.0001f then
+            if renderSingleFrame.current then
+                JS.debugger ()
+            // TODO move normal calculation and isInFront to Render.world function
+            // let n = { X = Math.Cos playerRotation.current; Y = 0.; Z = Math.Sin playerRotation.current }
+            let dotProduct = // n * (a - p)
+                n.Dot { X = entityPoint.X - (playerPt.X + n.X); Y = entityPoint.Y - 0.5; Z = entityPoint.Z - (playerPt.Y + n.Z) }
+            console.log ("normal = ", n)
+            console.log ("dotProduct =", dotProduct)
+            let isInFront = dotProduct > 0
+            // console.log "dot product ="
+            if isInFront && distanceFromPlane > 0f && MathF.Abs(offsetZ) < 0.0001f then
                 console.log ("offset = ", offsetX, offsetY)
                 let positionX, positionY =
                     Render.cartesianToScreen
@@ -326,8 +344,12 @@ let GameWindow (game: Models.Game) =
                         (int (JS.Math.round (float offsetX * canvas.width)))
                         (int (JS.Math.round (float offsetY * canvas.height)))
                 let size = int (JS.Math.round (200. / (0.0 + float distanceFromPlane)))
-                // todo: Draw scaled image
+                let scale = (sprite.width / (0.0 + float distanceFromPlane)) / sprite.width
                 Render.drawRectangle (positionX - (size / 2)) (positionY + (size / 2)) size size (fun _ -> 0uy, 120uy, 255uy, 255uy) canvasData
+                
+                let size = sprite.width * scale |> JS.Math.round |> int
+                // Render.drawScaledSprite sprite (positionX - (size / 2), (positionY + (size / 2))) scale canvasData
+                Render.drawScaledSprite sprite (positionX - (size / 2), (positionY + (size / 2))) scale canvasData
         ctx.putImageData (canvasData, 0, 0)
     // window.setInterval ((fun () ->
     let rec loop (time: float) =
@@ -480,7 +502,7 @@ let createGameRoot () = promise {
     let! wallTextureData = IO.loadImage ("image.png", 64)
     let! heartTextureData =
         IO.loadImage "heart.png"
-        |> Promise.map (Render.scaleImage 2)
+        |> Promise.map (Render.scaleImage 8)
     let transparency = wallTextureData.data[0], wallTextureData.data[1], wallTextureData.data[2]
     console.log transparency
     let game = {

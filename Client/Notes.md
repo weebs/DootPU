@@ -1,4 +1,5 @@
-- TODO Raycast depth buffer
-- TODO Drawing sprites in the world
-- TODO Light fixtures (placing objects in the world at arbitrary locations)
 - DONE World to screen coordinates
+- TODO Drawing scaled sprites
+- TODO Drawing sprites in the world
+- TODO Raycast depth buffer
+- TODO Light fixtures (placing objects in the world at arbitrary locations)
