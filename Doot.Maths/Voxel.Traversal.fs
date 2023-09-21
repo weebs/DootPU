@@ -55,7 +55,7 @@ let findIntersection (u: Vector2) (v: Vector2) checkVoxel =
         else
             int (Math.Floor y)
     let mutable voxelFound = None
-    while count < 100000 && voxelFound = None do
+    while count < 2000 && voxelFound = None do
         count <- count + 1
         let dx = distance x v.X
         let dy = distance y v.Y
