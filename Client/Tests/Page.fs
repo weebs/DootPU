@@ -8,6 +8,7 @@ open Fable.Core
 // open Fable.Core.JS
 open Feliz
 open Browser
+open PGA
 open Raycaster_Demo
 open Dootverse.Game
 open Dootverse
@@ -30,8 +31,8 @@ type svg with
 let RotatePoint () =
     let screen = Screen(400, 400)
     let int = JS.Math.round >> int
-    let (rx, ry) = Render.rotate (x, y) theta
-    let (rx1, ry1) = Render.rotate (x1, y1) theta
+    let (rx, ry) = Render.rotatePoint2d (x, y) theta
+    let (rx1, ry1) = Render.rotatePoint2d (x1, y1) theta
 
     console.log (x, y)
     console.log (x1, y1)
@@ -135,7 +136,106 @@ let App () =
         Header ()
         SpriteScaling ()
     ]
-
+module RenderingTests =
+    open type PGA3D
+    [<ReactComponent>]
+    let WorldToScreenCoordinates () =
+        let screen = Screen(400, 400)
+        let canvasHeight = 480f
+        let canvasWidth = 640f
+        let x, setX = React.useState -8
+        let y, setY = React.useState 0
+        let rotation, setRotation = React.useState (Math.Tau / 8.0)
+        let pt = point(float32 x, 0f, float32 y)
+        let initCameraOrigin = point(0f, 0f, 1f)
+        let initCameraRight = point(1f, 0f, 1f)
+        let r = rotor(float32 rotation, point(0f, 0f, 0f) &&& point(0f, 10f, 0f))
+        let playerForward = r * direction(0f, 0f, 400f) * ~~~r
+        let cameraOrigin = r * initCameraOrigin * ~~~r + pt.AsDirection
+        let cameraRight = (r * initCameraRight * ~~~r) + pt.AsDirection
+        let distance_ = pt + playerForward
+        let x1, y1 = distance_.X * 10f, distance_.Z * 10f
+        
+        let cameraPlane =
+            // let p = point(0f, canvasHeight / 2f, 10f) &&& point(10f, canvasHeight / 2f, 10f) &&& point(0f, canvasHeight / 2f + 10f, 10f)
+            let p = cameraOrigin &&& cameraRight &&& translate(cameraOrigin, direction(0f, 1f, 0f))
+            p
+            // r * p * ~~~r
+        let cameraEye = point(float32 x, 0.5f, float32 y)
+        // let cameraPlane = point
+        let entityPoint = point(2f, 1f, 8f)
+        let ray = cameraEye &&& entityPoint
+        let pointOnPlane = ray ^^^ cameraPlane
+        let offset =
+            // let r = rotor(float32 -rotation, point(0f, 0f, 0f) &&& point(0f, 10f, 0f))
+            // let pointOnPlane = r * pointOnPlane * ~~~r
+            let pointOnPlane = ~~~r * pointOnPlane * r
+            pointOnPlane.normalized() - ((~~~r * cameraOrigin * r) + direction(0f, 0.5f, 0f)).AsDirection
+        let distanceFromPlane = distance(entityPoint, cameraPlane)
+        // let offset, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null { X =  }
+            // distance = || a.norm v b.norm ||
+            // entityPoint.normalized() &&& cameraPlane.normalized()
+            // |> fun result -> result.norm()
+            // pointOnPlane.normalized() - initCameraOrigin.AsDirection
+        Html.div [
+            Html.div [
+                Html.input [
+                    prop.type' "range"
+                    prop.onChange setX
+                    prop.max (screen.Width / 2)
+                    prop.min (-screen.Width / 2)
+                    prop.value x
+                ]
+                Html.input [
+                    prop.type' "range"
+                    prop.onChange setY
+                    prop.max (screen.Height / 2)
+                    prop.min (-screen.Height / 2)
+                    prop.value y
+                ]
+                Html.input [
+                    prop.type' "range"
+                    prop.max Math.Tau
+                    prop.min -Math.Tau
+                    prop.value rotation
+                    prop.step (Math.Tau / 32.0)
+                    prop.onChange setRotation
+                ]
+                Html.span rotation
+            ]
+            Html.h4 ("e0 = " + string e0)
+            Html.h4 ("pt = " + string pt)
+            Html.h4 ("up line = " + string (point(0f, 1f, 0f) &&& point(0f, 0f, 0f)))
+            Html.h4 ("camera plane = " + string cameraPlane)
+            Html.h4 ("rotor = " + string r)
+            Html.h4 ("forward direction = " + string playerForward)
+            Html.h4 ("Camera origin = " + string cameraOrigin.Vector)
+            Html.h4 ("Camera right = " + string cameraRight.Vector)
+            Html.h4 ("Entity point = " + string entityPoint.Vector)
+            Html.h4 ("Point on plane = " + string pointOnPlane.Vector)
+            Html.h4 ("Point on plane = " + string pointOnPlane)
+            Html.h4 ("Offset = " + string offset.Vector)
+            Html.h4 ("Offset z = " + string (Math.Abs(offset.Z) < 0.00001f))
+            Html.h4 (string cameraOrigin)
+            Html.h4 ("entity distance from plane = " + string distanceFromPlane)
+            // todo: Always have to normalize a point before adding a direction vector
+            Html.h4 (string (cameraOrigin.AsDirection * (cameraOrigin + cameraOrigin) * ~~~cameraOrigin.AsDirection))
+            Svg.svg [
+                svg.width screen.Width
+                svg.height screen.Height
+                svg.children [
+                    screen.circle ("pink", 2, x * 10, y * 10)
+                    screen.circle ("black", 2, int (10f * pt.X), int (10f * pt.Z))
+                    // screen.circle ("blue", 2, int (pt.normalized() + (cameraRight.AsDirection * 10f)).X, int (pt.normalized() + cameraRight.AsDirection * 10f).Z)
+                    screen.circle ("blue", 2, int (cameraRight.X * 10f), int (cameraRight.Z * 10f))
+                    screen.circle ("red", 2, int (entityPoint.X * 10f), int (entityPoint.Z * 10f))
+                    screen.circle ("green", 2, int (pointOnPlane.X * 10f), int (pointOnPlane.Z * 10f))
+                    // screen.line ("blue", int x, int y, int x1, int y1)
+                    // screen.line "green" (int ) (int y) (int x1) (int y1)
+                    screen.line "green" (int (pt.X * 10f)) (int (pt.Z * 10f)) (int x1) (int y1)
+                ]
+            ]
+        ]
 let runTestApp () =
     document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (App ())
 open type PGA.PGA2D
@@ -152,5 +252,6 @@ let run () = promise {
     // localStorage.clear()
     screenColumns 8 theta (Vector2(0., 0.))
     |> Seq.iter (printfn "%A")
+    document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (RenderingTests.WorldToScreenCoordinates ())
 }
 // console.log ("distance (0, 2) from (0, 1) -> (1, 1) = ", distanceFromLine (Vector2(0f, 1f)) (Vector2(1f, 1f)) (Vector2(8f, 11f)))

@@ -24,9 +24,9 @@
         <PackageReference Include="Feliz.UseElmish" />
     </ItemGroup>
     <ItemGroup>
+        <Content Include="Notes.md" />
         <Content Include="package.json" />
         <Compile Include="../Wad/Reader.fs" />
-        <Compile Include="Rotations.fs" />
         <Compile Include="Svg.fs" />
         <Compile Include="DoomGame.fs" />
         <Compile Include="Raycaster.Demo.fs" />
@@ -38,6 +38,7 @@
         <Compile Include="Tests\Page.fs" />
         <Content Include="Tests\audio.html" />
         <TypeScriptCompile Include="Tests\audio.ts" />
+        <Compile Include="Tests\Rotations.fs" />
         <Content Include="*.html" />
     </ItemGroup>
 
