@@ -24,7 +24,6 @@
 
     <ItemGroup>
 <!--      <ProjectReference Include="..\Algebra\Algebra.csproj" />-->
-      <ProjectReference Include="..\Algebra\Algebra.csproj" />
       <ProjectReference Include="..\Doot.Maths\Doot.Maths.fsproj" />
     </ItemGroup>
 
