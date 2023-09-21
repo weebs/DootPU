@@ -2,9 +2,10 @@ module Dootverse.Client.Svg
 
 open Feliz
 
-type Screen(width, height) =
+type Screen(width, height, ?scale) =
+    let scale = defaultArg scale 1
     let toSvgCoordinate x y =
-        ((width / 2) + x), ((height / 2) - y)
+        ((width / 2) + x * scale), ((height / 2) - y * scale)
     member this.Width = width
     member this.Height = height
     member _.voxel size x y color =
@@ -43,7 +44,8 @@ type Screen(width, height) =
             svg.y1 y1
             svg.y2 y2
             svg.stroke color
-            svg.strokeWidth 1
+            svg.fill color
+            svg.strokeWidth 2
         ]
 
 let blockSize = 40

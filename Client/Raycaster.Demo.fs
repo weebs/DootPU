@@ -218,6 +218,7 @@ let RaycastDemo () =
             prop.ref setCanvas
         ]
     ]
+let raycast () = ()
 // type Screen = {
     // voxel: int -> int -> int -> string -> ReactElement
     // width: int
