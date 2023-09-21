@@ -46,6 +46,9 @@ type PGA3D(?f: float32, ?idx: int) =
         res.[14] <- -a[14]
         res.[15] <- a[15]
         res
+    
+    static member (>>>) (a: PGA3D, b: PGA3D) =
+        a * b * ~~~a
         
     /// <summary>
     /// PGA3D.Dual : res = !a
@@ -602,10 +605,16 @@ type PGA3D(?f: float32, ?idx: int) =
 open type PGA3D
 let inline (^^^) a b = PGA3D.(^^^) (a, b)
 type PGA3D with
-    member this.X = this[13]
-    member this.Y = this[12]
-    member this.Z = this[11]
-    member this.Vector = (this.X, this.Y, this.Z)
+    member this.X = this.normalized()[13]
+    member this.Y = this.normalized()[12]
+    member this.Z = this.normalized()[11]
+    member this.Vector =
+        let this = this.normalized()
+        (this.X, this.Y, this.Z)
+    member this.AsDirection =
+        this.normalized() - PGA3D.e123
+    
+    
     member this.ToPoint = $"({this.X}, {this.Y}, {this.Z})"
     // PGA lines are bivectors.
     static member e01 = PGA3D.e0 ^^^ PGA3D.e1; 
@@ -636,13 +645,18 @@ type PGA3D with
         // PGA3D.e123 +
         x * PGA3D.e032 + y * PGA3D.e013 + z * PGA3D.e021; (* } *)
         
-    
+    static member distance (a: PGA3D, b: PGA3D) = (a.normalized() &&& b.normalized()).norm()
+        
     /// <summary>
     /// Rotors (euclidean lines) and translators (ideal lines)
     /// </summary>
     static member rotor (angle: float32, line: PGA3D) (* { *) =
         (MathF.Cos(angle/2.0f)) +  (MathF.Sin(angle/2.0f)) * line.normalized() (* } *)
+    static member rotate(element: PGA3D, rotation: PGA3D) =
+        rotation * element * ~~~rotation
     static member translator(dist: float32, line: PGA3D) (* { *) = 1.0f + (dist/2.0f) * line (* } *)
+    static member translate(point: PGA3D, direction: PGA3D) =
+        point.normalized() + direction
     
     // for our toy problem (generate points on the surface of a torus)
     // we start with a function that generates motors.
