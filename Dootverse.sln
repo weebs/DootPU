@@ -2,8 +2,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Wad", "Wad\Wad.fsproj", "{875E0A53-418F-496F-82EC-A13F7242279D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Algebra", "Algebra\Algebra.csproj", "{12665DC0-EDB7-48AB-B47A-9B5BB7D04FE2}"
-EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Doot.Maths", "Doot.Maths\Doot.Maths.fsproj", "{0E8C4BF5-3DB3-4931-B8D0-39FA16A0291E}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Doot.Tests", "Doot.Tests\Doot.Tests.fsproj", "{CDF84C91-68B3-4F06-93C3-4CED77F50424}"
@@ -11,6 +9,10 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Client", "Client\Client.fsproj", "{F4601DCD-E801-473E-9A13-66AB81B92005}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Bindings", "..\bindings\Bindings.fsproj", "{BF1E429A-281C-49B7-BCAA-4155C1856983}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "GameServer", "..\FableGame\GameServer\GameServer.fsproj", "{05640935-F373-47A5-97E5-D05EBD589DCB}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "App", "..\FableGame\src\App.fsproj", "{2B39A1D0-2539-4A3C-8FF9-2B79EEDFCCB6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -22,10 +24,6 @@ Global
 		{875E0A53-418F-496F-82EC-A13F7242279D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{875E0A53-418F-496F-82EC-A13F7242279D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{875E0A53-418F-496F-82EC-A13F7242279D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{12665DC0-EDB7-48AB-B47A-9B5BB7D04FE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{12665DC0-EDB7-48AB-B47A-9B5BB7D04FE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{12665DC0-EDB7-48AB-B47A-9B5BB7D04FE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{12665DC0-EDB7-48AB-B47A-9B5BB7D04FE2}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0E8C4BF5-3DB3-4931-B8D0-39FA16A0291E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0E8C4BF5-3DB3-4931-B8D0-39FA16A0291E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E8C4BF5-3DB3-4931-B8D0-39FA16A0291E}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -42,5 +40,13 @@ Global
 		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BF1E429A-281C-49B7-BCAA-4155C1856983}.Release|Any CPU.Build.0 = Release|Any CPU
+		{05640935-F373-47A5-97E5-D05EBD589DCB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{05640935-F373-47A5-97E5-D05EBD589DCB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{05640935-F373-47A5-97E5-D05EBD589DCB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{05640935-F373-47A5-97E5-D05EBD589DCB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B39A1D0-2539-4A3C-8FF9-2B79EEDFCCB6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B39A1D0-2539-4A3C-8FF9-2B79EEDFCCB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B39A1D0-2539-4A3C-8FF9-2B79EEDFCCB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B39A1D0-2539-4A3C-8FF9-2B79EEDFCCB6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
