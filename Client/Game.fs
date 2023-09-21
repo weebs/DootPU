@@ -237,12 +237,9 @@ let GameWindow (game: Models.Game) =
     let renderSingleFrame = React.useRef true
     
     let playerPosition, setPlayerPosition =
-        // React.useStateWithUpdater(Vector2(-4.2f, 3f))
-        // React.useStateWithUpdater(Vector2(2.1, 0.))
         useRefState (Vector2(2.0, 2.0))
     
     
-    // React.useEffectOnce <| fun () ->
     // todo: Duplicating canvas to save state
     // do
         // let canvas = document.createElement "canvas" :?> HTMLCanvasElement
@@ -258,14 +255,10 @@ let GameWindow (game: Models.Game) =
             if document.pointerLockElement <> null then
                 document.exitPointerLock()
                 setMenuOpen true
-        // if isKeyPressed "escape" then
-        //     document.exitPointerLock()
         if isKeyJustPressed "enter" || isKeyJustPressed "tab" then
             if gamePausedRef.current then
                 setGamePaused false
             if document.pointerLockElement = null then
-                // canvasRef.current.requestPointerLock ()
-                // document.body.requestPointerLock ()
                 // requestPointerLock {| unadjustedMovement = true |}
                 requestPointerLock ()
                 setMenuOpen false
@@ -300,9 +293,10 @@ let GameWindow (game: Models.Game) =
         
         playerPosition.current <- playerPosition.current + velocityDirection
         
+        // Revert position when colliding with a wall
         if mapData.ContainsKey (int (Math.Floor playerPosition.current.X), int (Math.Floor playerPosition.current.Y)) then
-            // playerPosition <- Vector2(0., 0.)
             playerPosition.current <- originalPosition
+            
     let render (time: float) : unit =
         let canvas = canvasRef.current
         let ctx = canvas.getContext_2d ()
@@ -315,88 +309,25 @@ let GameWindow (game: Models.Game) =
                 playerPosition.current
                 playerRotation.current
         let canvasData = ImageData.Create (img :> obj :?> _, int canvas.width, int canvas.height)
+        
         // Draw item in bottom right of screen
         Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
         
-        
-        
-        let toCartesian width height x y =
-            ((width / 2) + x), ((height / 2) - y)
-            // x, height - y
-        let cameraEyePosition = PGA3D.point (
-            // todo: scaling width ?
-            // float32 playerPosition.current.X * float32 canvas.width,
-            // canvas.height / 2.0 |> float32,
-            // float32 playerPosition.current.Y * float32 canvas.width)
-            float32 playerPosition.current.X,
-            0.5f,
-            float32 (playerPosition.current.Y - 0.0))
-        console.log ("camera eye = ", cameraEyePosition.Vector)
-        // let rotation = PGA3D.rotor (float32 playerRotation.current, cameraEyePosition &&& (cameraEyePosition + PGA3D.direction(0f, 1f, 0f)))
-        let rotation = PGA3D.rotor (float32 -playerRotation.current, e1 * e3)
-        let inverseRotation = PGA3D.rotor (float32 playerRotation.current, e1 * e3)
-        // let inverseRotation = PGA3D.rotor (float32 playerRotation.current, playerCameraPosition &&& (playerCameraPosition + PGA3D.direction(0f, 1f, 0f)))
-        let playerForwardDirection = rotation * PGA3D.direction(0f, 0f, 1f) * ~~~rotation
-        
-        // let cameraPlaneOrigin = rotation * (playerCameraPosition + playerForwardDirection) * ~~~rotation
-        
-        // let cameraPlaneOrigin = playerCameraPosition + (rotation * PGA3D.direction(0f, 0f, 1f) * ~~~rotation)
-        let cameraPlaneOrigin = cameraEyePosition + (rotation * PGA3D.direction(0f, 0f, 1f) * ~~~rotation)
-        let cameraPlaneRight = cameraEyePosition + (rotation * PGA3D.direction(1f, 0f, 1f) * ~~~rotation)
-        let cameraPlaneUp = cameraEyePosition + (rotation * PGA3D.direction(0f, 1f, 1f) * ~~~rotation)
-        let cameraPlane = cameraPlaneOrigin &&& cameraPlaneRight &&& cameraPlaneUp
         for (position, asset) in gameState.current.entities do
-            // console.log "============"
-            // console.log ("camera eye position = ", cameraEyePosition.Vector)
-            // console.log ("camera plane origin = ", cameraPlaneOrigin)
-            // console.log ("camera plane right = ", cameraPlaneRight.Vector)
-            // let (Image sprite) = asset
-            // let topLeft = PGA3D.point(float32 position.X, float32 (sprite.height / canvas.height), float32 position.Y)
-            // let bottomRight = PGA3D.point(float32 position.X, float32 (sprite.height / canvas.height), float32 position.Y) 
-            // console.log ("topLeft = ", topLeft.Vector)
-            // let directionFromCameraOrigin = cameraEyePosition &&& topLeft
-            // console.log ("direction from camera origin =", string directionFromCameraOrigin)
-            // // let screenPosition = (inverseRotation * (directionFromCameraOrigin ^^^ cameraPlane) * ~~~inverseRotation)
-            // let pointOfIntersection = directionFromCameraOrigin ^^^ cameraPlane
-            // console.log ("point of intersection with plane =", string pointOfIntersection.ToPoint)
-            // // let screenPosition = (~~~inverseRotation * pointOfIntersection * inverseRotation)
-            // let screenPosition = (inverseRotation * pointOfIntersection * ~~~inverseRotation)
-            // console.log ("screen position = ", screenPosition.Vector)
-            // console.log ("offset dir = ", PGA3D.direction(cameraPlaneOrigin.X, cameraPlaneOrigin.Y, cameraPlaneOrigin.Z))
-            // let cameraPlaneOrigin = inverseRotation * cameraPlaneOrigin * ~~~inverseRotation
-            // let screenOffset = screenPosition.normalized() - PGA3D.direction(cameraPlaneOrigin.X, cameraPlaneOrigin.Y, cameraPlaneOrigin.Z)
-            // console.log screenPosition
-            // console.log screenOffset
-            // console.log ("screen offset = ", screenOffset.Vector)
-            // // let screenOffset = screenPosition - PGA3D.direction(playerPosition)
-            // // console.log ("screen offset = ", string screenOffset)
-            // // console.log ("rotated xyz = ", screenX, screenY, screenZ)
-            // // let (screenX, screenY, screenZ) = (cameraPlane ^^^ directionFromCameraOrigin).Vector
-            // // console.log ("xyz = ", screenX, screenY, screenZ)
-            // // console.log cameraScreenPosition
-            // console.log ("entity position = ", position)
-            // // let (x, y) = toCartesian (int canvas.width) (int canvas.height) ()
-            // let (x, y) = toCartesian (int canvas.width) (int canvas.height) (int (float screenOffset.X * canvas.width / 2.0)) (int (float screenOffset.Y * canvas.height / 2.0))
-            // console.log (x, y)
             let entityPoint = { X = position.X; Y = 0.4; Z = position.Y }
             let playerPt = { X = playerPosition.current.X; Y = playerPosition.current.Y }
-            console.log ("playerPt = ", playerPt)
-            console.log ("entityPoint = ", entityPoint)
             let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
             if MathF.Abs(offsetZ) < 0.0001f then
                 console.log ("offset = ", offsetX, offsetY)
-                // let positionX = JS.Math.round(canvasData.width * (float x + 0.5)) |> int
-                // let positionY = JS.Math.round(canvasData.height * (0.5 + float y)) |> int
-                let positionX = JS.Math.round(canvasData.width / 2.0 + float offsetX * canvas.width) |> int
-                let positionY = JS.Math.round(canvasData.height / 2.0 - float offsetY * canvas.height) |> int
-                let positionX, positionY = Render.cartesianToScreen (int canvasData.width) (int canvasData.height) (int (JS.Math.round (float offsetX * canvas.width))) (int (JS.Math.round (float offsetY * canvas.height)))
-                console.log ("drawing pixel ", positionX, positionY)
-                // Render.drawImage sprite { X = x; Y = y } canvasData
+                let positionX, positionY =
+                    Render.cartesianToScreen
+                        (int canvasData.width) (int canvasData.height)
+                        (int (JS.Math.round (float offsetX * canvas.width)))
+                        (int (JS.Math.round (float offsetY * canvas.height)))
                 let size = int (JS.Math.round (200. / (0.0 + float distanceFromPlane)))
+                // todo: Draw scaled image
                 Render.drawRectangle (positionX - (size / 2)) (positionY + (size / 2)) size size (fun _ -> 0uy, 120uy, 255uy, 255uy) canvasData
-        // Render.drawImage itemTexture { X =  }
-        // Render.drawImage itemTexture { X = 0; Y = 0; } imgData
         ctx.putImageData (canvasData, 0, 0)
     // window.setInterval ((fun () ->
     let rec loop (time: float) =
@@ -538,6 +469,7 @@ let createGameRoot () = promise {
     console.log gif
     // https://github.com/matt-way/gifuct-js
     let! response = Fetch.fetch "sword_character.gif" []
+    // todo: Gif
     let! response = Fetch.fetch "character.gif" []
     let! buffer = response.arrayBuffer()
     let gifData = gif.parseGIF buffer
@@ -547,12 +479,8 @@ let createGameRoot () = promise {
     console.log frames[12].AsImage
     let! wallTextureData = IO.loadImage ("image.png", 64)
     let! heartTextureData =
-        // IO.loadImage ("heart.png", 64)
         IO.loadImage "heart.png"
         |> Promise.map (Render.scaleImage 2)
-    console.log ("heart texture", heartTextureData)
-    // let! wallTextureData = IO.loadImage ("sword_character.gif", 256, (240, 180))
-    // let wallTextureData = frames[0].AsImage
     let transparency = wallTextureData.data[0], wallTextureData.data[1], wallTextureData.data[2]
     console.log transparency
     let game = {
