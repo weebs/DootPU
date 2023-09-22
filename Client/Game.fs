@@ -375,42 +375,6 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
         setGameState { gameState.current with playerPosition = p }
     Html.div [
         Html.div [
-            Html.p $"{gameState.current.playerPosition}"
-            Html.button [
-                prop.text "Render Single Frame"
-                prop.onClick (fun _ -> renderSingleFrame.current <- true)
-            ]
-            Html.button [
-                prop.onClick (fun _ ->
-                    if not gamePausedRef.current then
-                        setGamePaused true
-                    else
-                        window.requestAnimationFrame render
-                        |> ignore
-                        setGamePaused false
-                )
-                prop.text (if gamePausedRef.current then "Play" else "Pause")
-            ]
-            Html.button [
-                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(-0.1, 0.)))
-                prop.text "Left"
-            ]
-            Html.button [
-                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0.1, 0.)))
-                prop.text "Right"
-            ]
-            Html.button [
-                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0., 0.1)))
-                prop.text "Forward"
-            ]
-            Html.button [
-                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0., -0.1)))
-                prop.text "Back"
-            ]
-        ]
-        Html.h4 $"Rotation: {gameState.current.playerRotation}"
-        Html.h4 frameTime.current
-        Html.div [
             Html.div [
                 prop.style [
                     style.position.absolute
@@ -471,6 +435,42 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
                     // style.display.none
                 ]
             ]
+        ]
+        Html.div [
+            Html.span $"{gameState.current.playerPosition}"
+            Html.button [
+                prop.text "Render Single Frame"
+                prop.onClick (fun _ -> renderSingleFrame.current <- true)
+            ]
+            Html.button [
+                prop.onClick (fun _ ->
+                    if not gamePausedRef.current then
+                        setGamePaused true
+                    else
+                        window.requestAnimationFrame render
+                        |> ignore
+                        setGamePaused false
+                )
+                prop.text (if gamePausedRef.current then "Play" else "Pause")
+            ]
+            Html.button [
+                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(-0.1, 0.)))
+                prop.text "Left"
+            ]
+            Html.button [
+                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0.1, 0.)))
+                prop.text "Right"
+            ]
+            Html.button [
+                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0., 0.1)))
+                prop.text "Forward"
+            ]
+            Html.button [
+                prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0., -0.1)))
+                prop.text "Back"
+            ]
+            Html.h4 $"Rotation: {gameState.current.playerRotation}"
+            Html.h4 frameTime.current
         ]
     ]
 let createGameRoot () = promise {
