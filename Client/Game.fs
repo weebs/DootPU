@@ -322,19 +322,23 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
                     |> fun (x, y, z) -> { X = float x; Y = float y; Z = float z }
             let playerPt = { X = playerPosition.current.X; Y = playerPosition.current.Y }
             let cameraEyePt = { X = playerPt.X - n.X; Y = playerPt.Y - n.Z }
-            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
+            // todo: Do camera plane calculation outside of this method since all iterations will have the same value
+            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 playerRotation.current) entityPoint
+            // let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
             if renderSingleFrame.current then
                 JS.debugger ()
             // TODO move normal calculation and isInFront to Render.world function
             // let n = { X = Math.Cos playerRotation.current; Y = 0.; Z = Math.Sin playerRotation.current }
             let dotProduct = // n * (a - p)
-                n.Dot { X = entityPoint.X - (playerPt.X + n.X); Y = entityPoint.Y - 0.5; Z = entityPoint.Z - (playerPt.Y + n.Z) }
+                n.Dot { X = entityPoint.X - (cameraEyePt.X + n.X); Y = entityPoint.Y - 0.5; Z = entityPoint.Z - (cameraEyePt.Y + n.Z) }
             console.log ("normal = ", n)
             console.log ("dotProduct =", dotProduct)
             let isInFront = dotProduct > 0
             // console.log "dot product ="
-            if isInFront && distanceFromPlane > 0f && MathF.Abs(offsetZ) < 0.0001f then
+            let distanceFromPlayer = (playerPosition.current - Vector2(entityPoint.X, entityPoint.Z)).Length()
+            console.log ("distance from player = ", distanceFromPlayer)
+            if isInFront && distanceFromPlayer >= 1. && MathF.Abs(offsetZ) < 0.0001f then
                 console.log ("offset = ", offsetX, offsetY)
                 let positionX, positionY =
                     Render.cartesianToScreen
