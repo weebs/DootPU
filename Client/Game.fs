@@ -201,7 +201,7 @@ let mutable frameCount = 0
 [<ReactComponent>]
 let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     let (Image wallTexture) = game.Assets["wall_texture"]
-    let (Image itemTexture) = game.Assets["item"]
+    // let (Image itemTexture) = game.Assets["item"]
     // let screen = Screen(880, 1000)
     // let windowHeight = 480.
     // let windowWidth = 640.
@@ -220,7 +220,7 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     // todo: 1, 7 also has errors
     // todo: (0.8999999985098839, -7) with cube at (8, 8) (1 right from 1, -7)
     // let mutable playerRotationInRadians = 0.
-    let playerRotation, setPlayerRotation = useRefState (Math.Tau / 2.0) //(Math.Tau / 4.0)
+    // let playerRotation, setPlayerRotation = useRefState (Math.Tau / 2.0) //(Math.Tau / 4.0)
     // let focalLength = 0.5
     // let screenCasts = seq {
     //     let rayCount = 320
@@ -241,9 +241,6 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     let renderSingleFrame = React.useRef true
     let userInterfaceFocused, setUserInterfaceFocused = React.useState false
     
-    let playerPosition, setPlayerPosition =
-        useRefState (Vector2(2.0, 8.0))
-    
     
     // todo: Duplicating canvas to save state
     // do
@@ -252,7 +249,7 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
         // canvas.height <- 480
         // document.body.appendChild canvas |> ignore
         // canvasRef.current <- canvas
-    let update (deltaTime: float) =
+    let update (deltaTime: float) gameState =
         if isKeyJustPressed "r" then
             renderSingleFrame.current <- true
         if isKeyJustPressed "p" then
@@ -274,7 +271,6 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
         // setInterval
         
     // Track start position in case new position collides with walls and we reset the player to the last position
-        let originalPosition = playerPosition.current
         
         let mutable velocityDirection = Vector2(0., 0.)
         if isKeyPressed "d" || isKeyPressed "ArrowRight" then
@@ -287,20 +283,29 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             velocityDirection <- velocityDirection + Vector2(0., -speed)
             
         
-        if isKeyPressed "q" then
-            playerRotation.current <- playerRotation.current + (Math.Tau * deltaTime * 0.2)
-        if isKeyPressed "e" then
-            playerRotation.current <- playerRotation.current - (Math.Tau * deltaTime * 0.2)
-        playerRotation.current <- playerRotation.current - (Math.Tau * deltaTime * float Engine.mouseX * 0.01)
+        let newRotation =
+            let mutable playerRotation = gameState.playerRotation
+            if isKeyPressed "q" then
+                playerRotation <- playerRotation + (Math.Tau * deltaTime * 0.2)
+            if isKeyPressed "e" then
+                playerRotation <- playerRotation - (Math.Tau * deltaTime * 0.2)
+            playerRotation <- playerRotation - (Math.Tau * deltaTime * float Engine.mouseX * 0.01)
+            playerRotation
             
         // velocityDirection <- velocityDirection / velocityDirection.Length()
-        velocityDirection <- (Render.rotateVector playerRotation.current velocityDirection).Normalized * speed * deltaTime
+        velocityDirection <- (Render.rotateVector newRotation velocityDirection).Normalized * speed * deltaTime
         
-        playerPosition.current <- playerPosition.current + velocityDirection
+        let newPosition =
+            let newPosition = gameState.playerPosition + velocityDirection
+            // Revert position when colliding with a wall
+            if mapData.ContainsKey (int (Math.Floor newPosition.X), int (Math.Floor newPosition.Y)) then
+                gameState.playerPosition
+            else
+                newPosition
         
-        // Revert position when colliding with a wall
-        if mapData.ContainsKey (int (Math.Floor playerPosition.current.X), int (Math.Floor playerPosition.current.Y)) then
-            playerPosition.current <- originalPosition
+        { gameState with
+            playerPosition = newPosition
+            playerRotation = newRotation }
             
     let render (time: float) : unit =
         frameCount <- frameCount + 1
@@ -314,24 +319,25 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
                 (int canvas.width)
                 (int canvas.height)
                 level
-                playerPosition.current
-                playerRotation.current
+                gameState.current.playerPosition.Vector2
+                gameState.current.playerRotation
         let canvasData = ImageData.Create (img :> obj :?> _, int canvas.width, int canvas.height)
         
         // Draw item in bottom right of screen
         // Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
-        gameState.current.entities |> Array.sortInPlaceBy (fun (p, _) -> -1.0 * (Math.Sqrt <| (p.X - playerPosition.current.X) ** 2.0 + (p.Y - playerPosition.current.Y) ** 2.0))
+        gameState.current.entities |> Array.sortInPlaceBy (fun (p, _) -> -1.0 * (Math.Sqrt <| (p.X - gameState.current.playerPosition.X) ** 2.0 + (p.Y - gameState.current.playerPosition.Y) ** 2.0))
+        let playerPosition = gameState.current.playerPosition.Vector2
         for (position, asset) in gameState.current.entities do
             let (Image sprite) = asset
             let entityPoint = { X = position.X; Y = 1.4; Z = position.Y }
             let n =
-                rotate(point(0f, 0f, 1f), rotor(float32 playerRotation.current, point(0f, 1f, 0f) &&& point(0f, 0f, 0f)))
+                rotate(point(0f, 0f, 1f), rotor(float32 gameState.current.playerRotation, point(0f, 1f, 0f) &&& point(0f, 0f, 0f)))
                     .Vector
                     |> fun (x, y, z) -> { X = float x; Y = float y; Z = float z }
-            let playerPt = { X = playerPosition.current.X; Y = playerPosition.current.Y }
+            let playerPt = { X = gameState.current.playerPosition.X; Y = gameState.current.playerPosition.Y }
             let cameraEyePt = { X = playerPt.X - n.X; Y = playerPt.Y - n.Z }
             // todo: Do camera plane calculation outside of this method since all iterations will have the same value
-            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 playerRotation.current) entityPoint
+            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 gameState.current.playerRotation) entityPoint
             // let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
             // if renderSingleFrame.current then
@@ -344,7 +350,7 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             console.log ("dotProduct =", dotProduct)
             let isInFront = dotProduct > 0
             // console.log "dot product ="
-            let distanceFromPlayer = (playerPosition.current - Vector2(entityPoint.X, entityPoint.Z)).Length()
+            let distanceFromPlayer = (playerPosition - Vector2(entityPoint.X, entityPoint.Z)).Length()
             console.log ("distance from player = ", distanceFromPlayer)
             if isInFront && distanceFromPlayer >= 1. && MathF.Abs(offsetZ) < 0.0001f then
                 console.log ("offset = ", offsetX, offsetY)
@@ -371,15 +377,18 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
         lastTime <- time
         
         // todo: use setInterval for the update loop ? avoid long waits from requestAnimationFrame when tab is not focused
-        update deltaTime
+        let newState = update deltaTime gameState.current
+        gameState.current <- newState
         Engine.mouseX <- 0
         Engine.mouseY <- 0
         
         // Update react elements
         if time - lastUiUpdate > uiUpdateInterval then
             lastUiUpdate <- time
-            setPlayerPosition playerPosition.current
-            setPlayerRotation playerRotation.current
+            // todo : SetUiGameState
+            setGameState gameState.current
+            // setPlayerPosition playerPosition
+            // setPlayerRotation playerRotation.current
             
         // Needs to be called after every update
         for kv in keysJustPressed do
@@ -401,10 +410,12 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             |> ignore
             // ), int interval)
             // |> ignore
-    let setPlayerPosition = fun f -> setPlayerPosition (f playerPosition.current)
+    let setPlayerPosition = fun f ->
+        let p = f gameState.current.playerPosition
+        setGameState { gameState.current with playerPosition = p }
     Html.div [
         Html.div [
-            Html.p $"{playerPosition.current}"
+            Html.p $"{gameState.current.playerPosition}"
             Html.button [
                 prop.text "Render Single Frame"
                 prop.onClick (fun _ -> renderSingleFrame.current <- true)
@@ -437,7 +448,7 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
                 prop.text "Back"
             ]
         ]
-        Html.h4 $"Rotation: {playerRotation.current}"
+        Html.h4 $"Rotation: {gameState.current.playerRotation}"
         Html.h4 frameTime.current
         Html.div [
             Html.div [
@@ -479,10 +490,10 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
                     let width = canvasRef.current.width |> int
                     // let px, py = x / canvasRef.current.width, y / canvasRef.current.height
                     console.log x
-                    console.log playerRotation.current
-                    let rayDirection = Render.getRaycastAtColumn width playerRotation.current (int (JS.Math.round x))
+                    // console.log playerRotation.current
+                    let rayDirection = Render.getRaycastAtColumn width gameState.current.playerRotation (int (JS.Math.round x))
                     console.log ("Ray direction = ", rayDirection)
-                    let raycast = findIntersection playerPosition.current rayDirection level.ContainsKey
+                    let raycast = findIntersection gameState.current.playerPosition.Vector2 rayDirection level.ContainsKey
                     match raycast with
                     | Some ((voxelX, voxelY), (pointX, pointY)) ->
                         console.log ("hit voxel", voxelX, ",", voxelY)
