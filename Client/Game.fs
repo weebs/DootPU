@@ -47,7 +47,7 @@ type IO() =
     static let mutable img = document.createElement "img" :?> HTMLImageElement
     static let mutable canvas = document.createElement "canvas" :?> HTMLCanvasElement
     
-    static member loadImage (filePath: string) : JS.Promise<ImageData> =
+    static member loadImage (filePath: string) : JS.Promise<AssetId * ImageData> =
         Promise.create (fun resolve reject ->
             img.setAttribute("src", filePath)
             img.onload <- fun _ ->
@@ -59,13 +59,13 @@ type IO() =
                 let wallTextureData = context2d.getImageData(0, 0, img.width, img.height)
                 img.onload <- fun _ -> ()
                 
-                resolve wallTextureData
+                resolve (AssetId filePath, wallTextureData)
             img.onerror <- fun err ->
                 img.onerror <- fun _ -> ()
                 reject (Exception(string err))
         )
     // https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Pixel_manipulation_with_canvas
-    static member loadImage (filePath: string, imageSize, (offsetX, offsetY)) : JS.Promise<ImageData> =
+    static member loadImage (filePath: string, imageSize, (offsetX, offsetY)) : JS.Promise<AssetId * ImageData> =
         Promise.create (fun resolve reject ->
             img.setAttribute("src", filePath)
             img.onload <- fun _ ->
@@ -77,12 +77,12 @@ type IO() =
                 let wallTextureData = context2d.getImageData(offsetX, offsetY, imageSize, imageSize)
                 img.onload <- fun _ -> ()
                 
-                resolve wallTextureData
+                resolve (AssetId filePath, wallTextureData)
             img.onerror <- fun err ->
                 img.onerror <- fun _ -> ()
                 reject (Exception(string err))
         )
-    static member loadImage (filePath: string, imageSize) : JS.Promise<ImageData> =
+    static member loadImage (filePath: string, imageSize) : JS.Promise<AssetId * ImageData> =
         IO.loadImage (filePath, imageSize, (0, 0))
 
 let useRefState (state: 'a) =
@@ -143,10 +143,6 @@ let toRgb color =
     | "orange" -> (255uy, 120uy, 50uy)
     | "blue" -> (0uy, 0uy, 255uy)
     | _ -> (0uy, 0uy, 0uy)
-let level =
-    let d = Dictionary()
-    mapData |> Map.iter (fun key value -> d[key] <- toRgb value)
-    d
 // let interval = 7f
 let mutable lastTime = 0.0
 let mutable lastRenderTime = 0.0
@@ -157,10 +153,11 @@ open type PGA3D
 let [<Emit("document.body.requestPointerLock($0)")>] requestPointerLock args = jsNative
     
 // |]
+let wallId = AssetId "image.png"
 let mutable frameCount = 0
 [<ReactComponent>]
-let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
-    let (Image wallTexture) = game.Assets["wall_texture"]
+let GameWindow (scene: Models.Scene) =
+    let (Image wallTexture) = scene.Assets[wallId]
     // let (Image itemTexture) = game.Assets["item"]
     // let screen = Screen(880, 1000)
     // let windowHeight = 480.
@@ -193,13 +190,11 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     let gamePausedRef, setGamePaused = useRefState true
     let menuOpen, setMenuOpen = useRefState true
     let frameTime, setFrameTime = useRefState 0.
-    let gameState, setGameState = useRefState {
-        playerPosition = { X = 0.; Y = 0. }
-        playerRotation = 0.
-        entities = entities
-    }
+    // World is the initial state of the scene
+    let gameState, setGameState = useRefState scene.World
     let renderSingleFrame = React.useRef true
     let userInterfaceFocused, setUserInterfaceFocused = React.useState false
+    let level = scene.World.Walls
     
     
     // todo: Duplicating canvas to save state
@@ -287,17 +282,19 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
         // Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
         gameState.current.entities |> Array.sortInPlaceBy (fun (p, _) -> -1.0 * (Math.Sqrt <| (p.X - gameState.current.playerPosition.X) ** 2.0 + (p.Y - gameState.current.playerPosition.Y) ** 2.0))
         let playerPosition = gameState.current.playerPosition.Vector2
-        for (position, asset) in gameState.current.entities do
-            let (Image sprite) = asset
+        let n =
+            let rotationLine = point(0f, 1f, 0f) &&& point(0f, 0f, 0f)
+            rotate(point(0f, 0f, 1f), rotor(float32 gameState.current.playerRotation, rotationLine))
+                .Vector
+                |> fun (x, y, z) -> { X = float x; Y = float y; Z = float z }
+        for (position, assetId) in gameState.current.entities do
+            let (Image sprite) = scene.Assets[assetId]
             let entityPoint = { X = position.X; Y = 1.4; Z = position.Y }
-            let n =
-                rotate(point(0f, 0f, 1f), rotor(float32 gameState.current.playerRotation, point(0f, 1f, 0f) &&& point(0f, 0f, 0f)))
-                    .Vector
-                    |> fun (x, y, z) -> { X = float x; Y = float y; Z = float z }
             let playerPt = { X = gameState.current.playerPosition.X; Y = gameState.current.playerPosition.Y }
             let cameraEyePt = { X = playerPt.X - n.X; Y = playerPt.Y - n.Z }
             // todo: Do camera plane calculation outside of this method since all iterations will have the same value
-            let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 gameState.current.playerRotation) entityPoint
+            let canvasOffsetFromCenter, distanceFromPlane =
+                Render.worldCoordinatesToScreenCoordinates null playerPt (float32 gameState.current.playerRotation) entityPoint
             // let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
             // if renderSingleFrame.current then
@@ -473,6 +470,13 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             Html.h4 frameTime.current
         ]
     ]
+// type [<Measure>] AssetId = class end
+// type [<Measure>] ImagePath = class end
+// type AssetId with
+    // with
+    // static member (+) (a: int<AssetId>, b: int) =
+        // let n = (int a + b)
+        // LanguagePrimitives.Int32WithMeasure<AssetId> n
 let createGameRoot () = promise {
     console.log gif
     // https://github.com/matt-way/gifuct-js
@@ -485,34 +489,53 @@ let createGameRoot () = promise {
     console.log gifData
     console.log frames
     console.log frames[12].AsImage
-    let! wallTextureData = IO.loadImage ("image.png", 64) |> Promise.map (Render.scaleImage 4)
-    let! heartTexture =
+    
+    let! _, wallTexture  = IO.loadImage ("image.png", 64)
+    let transparency = wallTexture.data[0], wallTexture.data[1], wallTexture.data[2]
+    console.log transparency
+    let wall = wallId, Image (Render.scaleImage 4 wallTexture)
+    Assets.RegisterAsset (wallId, snd wall)
+    
+    let! heartId, heartTexture =
         IO.loadImage "heart.png"
-        |> Promise.map (Render.scaleImage 8)
-    let! blueHeartTexture =
+    let heart =
+        heartId,
+        heartTexture |> Render.scaleImage 8 |> Image
+    Assets.RegisterAsset heart
+    
+    let! _, blueHeartTexture =
         IO.loadImage "heart.png"
-        |> Promise.map (Render.scaleImage 8)
     for i in 0..int (blueHeartTexture.width * blueHeartTexture.height) - 1 do
         let i = i * 4
         let blue = blueHeartTexture.data[i + 2]
         blueHeartTexture.data[i + 1] <- blueHeartTexture.data[i]
         blueHeartTexture.data[i + 2] <- blueHeartTexture.data[i]
         blueHeartTexture.data[i] <- blue
-    let transparency = wallTextureData.data[0], wallTextureData.data[1], wallTextureData.data[2]
+    let blueHeart =
+        AssetId "blue_heart.png",
+        blueHeartTexture |> Render.scaleImage 8 |> Image
+    Assets.RegisterAsset blueHeart
+        
     let! characterTexture = IO.loadImage "sword_character.gif"
-    console.log transparency
-    let gameEntities = [| //[|
-         { X = 2.; Y = 4. }, Image heartTexture
-         for i in 1..40 do
-             { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image heartTexture
-             { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image blueHeartTexture
-             // { X = JS.Math.random() * 20.0; Y = JS.Math.random() * 20.0; }, Image characterTexture
-     |]
+    JS.console.log heartId
+    
+    let level =
+        let d = Dictionary()
+        mapData |> Map.iter (fun key value -> d[key] <- toRgb value)
+        d
     let game = {
-        Assets = Map.ofArray [|
-            "wall_texture", Image wallTextureData
-            "item", Image blueHeartTexture
-        |]
+        Assets = Assets.All
+        World = {
+            playerPosition = { X = 0.; Y = 0. }
+            playerRotation = 0.
+            entities = [|
+                { X = 2.; Y = 4. }, fst heart
+                // for i in 1..40 do
+                //     { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, fst heart
+                //     { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, fst blueHeart
+            |]
+            Walls = level
+        }
     }
-    (ReactDOM.createRoot (document.getElementById "root")).render(GameWindow (game, gameEntities))
+    (ReactDOM.createRoot (document.getElementById "root")).render(GameWindow game)
 }
