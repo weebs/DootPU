@@ -40,7 +40,7 @@ type GifFrame =
 type GifJs =
     abstract member parseGIF: JS.ArrayBuffer -> Gif
     abstract member decompressFrames: Gif -> bool -> bool -> GifFrame[]
-let gif: GifJs = JsInterop.importAll "gifuct-js"    
+let gif: GifJs = JsInterop.importAll "gifuct-js"
 
 module Engine =
     let mutable debugKeys = true
@@ -195,6 +195,9 @@ let mutable lastUiUpdate = 0.0
 let uiUpdateInterval = 100.0
 open type PGA3D
 let [<Emit("document.body.requestPointerLock($0)")>] requestPointerLock args = jsNative
+    
+// |]
+let mutable frameCount = 0
 [<ReactComponent>]
 let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     let (Image wallTexture) = game.Assets["wall_texture"]
@@ -229,12 +232,14 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     let canvasRef = React.useRef<HTMLCanvasElement> null
     let gamePausedRef, setGamePaused = useRefState true
     let menuOpen, setMenuOpen = useRefState true
+    let frameTime, setFrameTime = useRefState 0.
     let gameState, setGameState = useRefState {
         playerPosition = { X = 0.; Y = 0. }
         playerRotation = 0.
         entities = entities
     }
     let renderSingleFrame = React.useRef true
+    let userInterfaceFocused, setUserInterfaceFocused = React.useState false
     
     let playerPosition, setPlayerPosition =
         useRefState (Vector2(2.0, 8.0))
@@ -298,6 +303,9 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             playerPosition.current <- originalPosition
             
     let render (time: float) : unit =
+        frameCount <- frameCount + 1
+        if frameCount % 10 = 0 then
+            setFrameTime time
         let canvas = canvasRef.current
         let ctx = canvas.getContext_2d ()
         let img, raycastDistances =
@@ -326,8 +334,8 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null playerPt (float32 playerRotation.current) entityPoint
             // let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
-            if renderSingleFrame.current then
-                JS.debugger ()
+            // if renderSingleFrame.current then
+                // JS.debugger ()
             // TODO move normal calculation and isInFront to Render.world function
             // let n = { X = Math.Cos playerRotation.current; Y = 0.; Z = Math.Sin playerRotation.current }
             let dotProduct = // n * (a - p)
@@ -430,6 +438,7 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             ]
         ]
         Html.h4 $"Rotation: {playerRotation.current}"
+        Html.h4 frameTime.current
         Html.div [
             Html.div [
                 prop.style [
@@ -446,12 +455,14 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
                             if menuOpen.current then
                                 Svg.text [
                                     svg.text "User Interface"
-                                    svg.stroke "green"
+                                    svg.stroke (if userInterfaceFocused then "yellow" else "green")
                                     svg.fill "grey"
                                     svg.className "large"
-                                    svg.x 100
-                                    svg.y 100
+                                    svg.x 10
+                                    svg.y 20
                                     svg.fontSize 12
+                                    svg.onMouseEnter (fun _ -> setUserInterfaceFocused true)
+                                    svg.onMouseLeave (fun _ -> setUserInterfaceFocused false)
                                 ]
                         ]
                     ]
@@ -459,7 +470,7 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             ]
             Html.canvas [
                 prop.width 640
-                prop.height 480
+                prop.height 400
                 prop.ref (fun e -> canvasRef.current <- e :?> _)
                 prop.onClick (fun ev ->
                     let rect = canvasRef.current.getBoundingClientRect ()
@@ -503,11 +514,21 @@ let createGameRoot () = promise {
     console.log gifData
     console.log frames
     console.log frames[12].AsImage
-    let! wallTextureData = IO.loadImage ("image.png", 64)
-    let! heartTextureData =
+    let! wallTextureData = IO.loadImage ("image.png", 64) |> Promise.map (Render.scaleImage 4)
+    let! heartTexture =
         IO.loadImage "heart.png"
         |> Promise.map (Render.scaleImage 8)
+    let! blueHeartTexture =
+        IO.loadImage "heart.png"
+        |> Promise.map (Render.scaleImage 8)
+    for i in 0..int (blueHeartTexture.width * blueHeartTexture.height) - 1 do
+        let i = i * 4
+        let blue = blueHeartTexture.data[i + 2]
+        blueHeartTexture.data[i + 1] <- blueHeartTexture.data[i]
+        blueHeartTexture.data[i + 2] <- blueHeartTexture.data[i]
+        blueHeartTexture.data[i] <- blue
     let transparency = wallTextureData.data[0], wallTextureData.data[1], wallTextureData.data[2]
+    let! characterTexture = IO.loadImage "sword_character.gif"
     console.log transparency
     let gameEntities = [| //[|
          { X = 2.; Y = 4. }, Image heartTexture
@@ -519,7 +540,7 @@ let createGameRoot () = promise {
     let game = {
         Assets = Map.ofArray [|
             "wall_texture", Image wallTextureData
-            "item", Image heartTextureData
+            "item", Image blueHeartTexture
         |]
     }
     (ReactDOM.createRoot (document.getElementById "root")).render(GameWindow (game, gameEntities))
