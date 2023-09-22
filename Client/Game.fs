@@ -532,9 +532,9 @@ let createGameRoot () = promise {
     console.log transparency
     let gameEntities = [| //[|
          { X = 2.; Y = 4. }, Image heartTexture
-         for i in 1..200 do
+         for i in 1..40 do
              { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image heartTexture
-             // { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image blueHeartTexture
+             { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image blueHeartTexture
              // { X = JS.Math.random() * 20.0; Y = JS.Math.random() * 20.0; }, Image characterTexture
      |]
     let game = {
