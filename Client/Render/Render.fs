@@ -202,6 +202,7 @@ let pixelsForColumn (imageData: ImageData) n size =
     |]
     
 let mutable buffer = Unchecked.defaultof<JS.Uint8ClampedArray>
+let mutable raycastDistance: float[] = Array.empty 
 let skyboxColor = (0uy, 24uy, 50uy)
 let scaleImage (scale: int) (img: ImageData) : ImageData =
     let buffer = ImageData.Create (img.width * float scale, img.height * float scale)
@@ -240,7 +241,7 @@ let drawRectangle (x: int) (y: int) (width: int) (height: int) (color: int * int
                     let color = color (x, y)
                     let offset = (y * int buffer.width + x) * 4
                     writeRgbaToImage buffer offset color
-let drawScaledSprite (img: ImageData) (position: int * int) (scale: float) (buffer: ImageData) =
+let drawScaledSprite (img: ImageData) (position: int * int) (scale: float) (raycastDistances: float[]) spriteDistance (buffer: ImageData) =
     let imgWidth = JS.Math.round(scale * img.width) |> int
     let imgHeight = JS.Math.round(scale * img.height) |> int
     let (pX, pY) = position
@@ -251,10 +252,14 @@ let drawScaledSprite (img: ImageData) (position: int * int) (scale: float) (buff
                     let nearestY = (float (y - pY) / float imgHeight) * img.height |> JS.Math.round |> int
                     let nearestX = (float (x - pX) / float imgWidth) * img.width |> JS.Math.round |> int
                     let offset = (nearestY * int img.width + nearestX) * 4
+                    let raycastDistance = raycastDistances[x]
                     let bufferOffset = (y * int buffer.width + x) * 4
-                    let (r, g, b, a) = imgRgba img offset
-                    if a <> 0uy then
-                        writeRgbaToImage buffer bufferOffset (imgRgba img offset)
+                    if spriteDistance <= raycastDistance then
+                        raycastDistances[x] <- spriteDistance
+                        // let (r, g, b, a) = imgRgba img offset
+                        let a = img.data[offset + 3]
+                        if a <> 0uy then
+                            writeRgbaToImage buffer bufferOffset (imgRgba img offset)
                         // for i in 0..3 do
                         //     buffer.data[bufferOffset + i] <- img.data[offset + i]
 // todo: what about when the image is out of bounds?
@@ -269,12 +274,14 @@ let drawImage (img: ImageData) (position: float2f) (buffer: ImageData) =
                 let offset = (y * int img.width + x) * 4
                 let bufferOffset = ((y + int position.Y) * int buffer.width + (x + int position.X)) * 4
                 let (r, g, b, a) = imgRgba img offset
-                if (r, g, b, a) <> (255uy, 255uy, 255uy, 0uy) then // && a <> 0uy then
+                // if (r, g, b, a) <> (255uy, 255uy, 255uy, 0uy)
+                if (r, g, b, a) <> (255uy, 255uy, 255uy, 0uy) && a <> 0uy then
                     for i in 1..4 do
                         buffer.data[bufferOffset + i - 1] <- img.data[offset + i - 1]
 let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>) position rotation =
     if buffer = Unchecked.defaultof<_> then
         buffer <- JS.Constructors.Uint8ClampedArray.Create (width * height * 4)
+        raycastDistance <- Array.create (width * height) 1000.0
     // Draw floor and ceiling
     let (r, g, b) = skyboxColor
     for y in 0..height - 1 do
@@ -315,6 +322,8 @@ let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>
             // let distance = distance * (1.0 - (Math.Abs(ray.X / 2.0) / distance))
             // https://www.permadi.com/tutorial/raycast/rayc8.html
             let distance = focalLength + (distanceFromLine cameraPlaneOrigin cameraPlaneFirstColumn (Vector2 pt))
+            for i in 0..height - 1 do
+                raycastDistance[index] <- distance
             // let distance = Math.Max(Math.Min(1.0, distance), distance)
             let columnHeight = int (float height / distance) * 2
             let yStart = (height - columnHeight) / 2
@@ -337,7 +346,8 @@ let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>
                 buffer[offset + 3] <- 255uy
                 
                 let (r, g, b, a) = imgRgba wallTextureData textureDataOffset
-                if (r, g, b) <> (255uy, 255uy, 255uy) then
+                // if (r, g, b) <> (255uy, 255uy, 255uy) && a <> 0uy then
+                if a <> 0uy then
                     buffer[offset] <- r
                     buffer[offset + 1] <- g
                     buffer[offset + 2] <- b
@@ -346,4 +356,4 @@ let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>
             ()
         index <- index + 1
         
-    buffer
+    buffer, raycastDistance

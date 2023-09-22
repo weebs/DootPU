@@ -196,7 +196,7 @@ let uiUpdateInterval = 100.0
 open type PGA3D
 let [<Emit("document.body.requestPointerLock($0)")>] requestPointerLock args = jsNative
 [<ReactComponent>]
-let GameWindow (game: Models.Game) =
+let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
     let (Image wallTexture) = game.Assets["wall_texture"]
     let (Image itemTexture) = game.Assets["item"]
     // let screen = Screen(880, 1000)
@@ -232,9 +232,7 @@ let GameWindow (game: Models.Game) =
     let gameState, setGameState = useRefState {
         playerPosition = { X = 0.; Y = 0. }
         playerRotation = 0.
-        entities = [|
-            { X = 2.; Y = 4. }, Image itemTexture
-        |]
+        entities = entities
     }
     let renderSingleFrame = React.useRef true
     
@@ -302,7 +300,7 @@ let GameWindow (game: Models.Game) =
     let render (time: float) : unit =
         let canvas = canvasRef.current
         let ctx = canvas.getContext_2d ()
-        let img =
+        let img, raycastDistances =
             Render.drawCamera
                 wallTexture
                 (int canvas.width)
@@ -314,7 +312,7 @@ let GameWindow (game: Models.Game) =
         
         // Draw item in bottom right of screen
         // Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
-        
+        gameState.current.entities |> Array.sortInPlaceBy (fun (p, _) -> -1.0 * (Math.Sqrt <| (p.X - playerPosition.current.X) ** 2.0 + (p.Y - playerPosition.current.Y) ** 2.0))
         for (position, asset) in gameState.current.entities do
             let (Image sprite) = asset
             let entityPoint = { X = position.X; Y = 1.4; Z = position.Y }
@@ -343,13 +341,15 @@ let GameWindow (game: Models.Game) =
                         (int canvasData.width) (int canvasData.height)
                         (int (JS.Math.round (float offsetX * canvas.width)))
                         (int (JS.Math.round (float offsetY * canvas.height)))
+                        
                 let size = int (JS.Math.round (200. / (0.0 + float distanceFromPlane)))
                 let scale = (sprite.width / (0.0 + float distanceFromPlane)) / sprite.width
-                Render.drawRectangle (positionX - (size / 2)) (positionY + (size / 2)) size size (fun _ -> 0uy, 120uy, 255uy, 255uy) canvasData
+                // todo: Drawing test rectangle
+                // Render.drawRectangle (positionX - (size / 2)) (positionY + (size / 2)) size size (fun _ -> 0uy, 120uy, 255uy, 255uy) canvasData
                 
                 let size = sprite.width * scale |> JS.Math.round |> int
                 // Render.drawScaledSprite sprite (positionX - (size / 2), (positionY + (size / 2))) scale canvasData
-                Render.drawScaledSprite sprite (positionX - (size / 2), (positionY + (size / 2))) scale canvasData
+                Render.drawScaledSprite sprite (positionX - (size / 2), (positionY + (size / 2))) scale raycastDistances (float distanceFromPlane) canvasData
         ctx.putImageData (canvasData, 0, 0)
     // window.setInterval ((fun () ->
     let rec loop (time: float) =
@@ -505,11 +505,18 @@ let createGameRoot () = promise {
         |> Promise.map (Render.scaleImage 8)
     let transparency = wallTextureData.data[0], wallTextureData.data[1], wallTextureData.data[2]
     console.log transparency
+    let gameEntities = [| //[|
+         { X = 2.; Y = 4. }, Image heartTexture
+         for i in 1..200 do
+             { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image heartTexture
+             // { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, Image blueHeartTexture
+             // { X = JS.Math.random() * 20.0; Y = JS.Math.random() * 20.0; }, Image characterTexture
+     |]
     let game = {
         Assets = Map.ofArray [|
             "wall_texture", Image wallTextureData
             "item", Image heartTextureData
         |]
     }
-    (ReactDOM.createRoot (document.getElementById "root")).render(GameWindow game)
+    (ReactDOM.createRoot (document.getElementById "root")).render(GameWindow (game, gameEntities))
 }
