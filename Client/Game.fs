@@ -13,6 +13,7 @@ open Dootverse.Models
 open Doot.Maths.Voxel.Traversal
 open Dootverse
 open PGA
+open Engine // todo
 
 type Dimensions =
     abstract member top: int
@@ -42,47 +43,6 @@ type GifJs =
     abstract member decompressFrames: Gif -> bool -> bool -> GifFrame[]
 let gif: GifJs = JsInterop.importAll "gifuct-js"
 
-module Engine =
-    let mutable debugKeys = true
-    let keysPressed = Dictionary<string, bool>()
-    let keysJustPressed = Dictionary<string, bool>()
-    let isKeyPressed (key: string) =
-        let key = key.ToLower()
-        if keysPressed.ContainsKey key then keysPressed[key] else false
-    let isKeyJustPressed key =
-        if keysJustPressed.ContainsKey key then keysJustPressed[key] else false
-    window.onkeydown <- fun key ->
-        if debugKeys then
-            console.log key
-        let c = key.key.ToLower()
-        // if c = "escape" then
-        //     key.preventDefault()
-        if c = "tab" then key.preventDefault()
-        if not <| isKeyPressed c then
-            keysJustPressed[c] <- true
-        keysPressed[c] <- true
-    window.onkeyup <- fun key ->
-        keysPressed[key.key.ToLower()] <- false
-    window.onblur <- fun _ ->
-        for kv in keysPressed do
-            keysPressed[kv.Key.ToLower()] <- false
-    let mutable mouseX = 0
-    let mutable mouseY = 0
-    document.body.onmousemove <- fun ev ->
-        if document.pointerLockElement <> null then
-            mouseX <- mouseX + int ev.movementX
-            mouseY <- mouseY + int ev.movementY
-        else
-            mouseX <- 0
-            mouseY <- 0
-        
-    let mutable pointerState = document.pointerLockElement = null
-    document.onpointerlockchange <-
-        fun ev ->
-            console.log ("element = ", document.pointerLockElement)
-            pointerState <- document.pointerLockElement = null
-            console.log ev
-open Engine // todo
 type IO() =
     static let mutable img = document.createElement "img" :?> HTMLImageElement
     static let mutable canvas = document.createElement "canvas" :?> HTMLCanvasElement
@@ -250,14 +210,14 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
         // document.body.appendChild canvas |> ignore
         // canvasRef.current <- canvas
     let update (deltaTime: float) gameState =
-        if isKeyJustPressed "r" then
+        if Keys.isJustPressed "r" then
             renderSingleFrame.current <- true
-        if isKeyJustPressed "p" then
+        if Keys.isJustPressed "p" then
             setGamePaused (not gamePausedRef.current)
             if document.pointerLockElement <> null then
                 document.exitPointerLock()
                 setMenuOpen true
-        if isKeyJustPressed "enter" || isKeyJustPressed "tab" then
+        if Keys.isJustPressed "enter" || Keys.isJustPressed "tab" then
             if gamePausedRef.current then
                 setGamePaused false
             if document.pointerLockElement = null then
@@ -267,27 +227,27 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             else
                 document.exitPointerLock()
                 setMenuOpen true
-        let speed = if isKeyPressed "shift" then 22.0 else 4.20
+        let speed = if Keys.isPressed "shift" then 22.0 else 4.20
         // setInterval
         
     // Track start position in case new position collides with walls and we reset the player to the last position
         
         let mutable velocityDirection = Vector2(0., 0.)
-        if isKeyPressed "d" || isKeyPressed "ArrowRight" then
+        if Keys.isPressed "d" || Keys.isPressed "ArrowRight" then
             velocityDirection <- velocityDirection + Vector2(speed, 0.)
-        if isKeyPressed "w" || isKeyPressed "ArrowUp" then
+        if Keys.isPressed "w" || Keys.isPressed "ArrowUp" then
             velocityDirection <- velocityDirection + Vector2(0., speed)
-        if isKeyPressed "a" || isKeyPressed "ArrowLeft" then
+        if Keys.isPressed "a" || Keys.isPressed "ArrowLeft" then
             velocityDirection <- velocityDirection + Vector2(-speed, 0.)
-        if isKeyPressed "s" || isKeyPressed "ArrowDown" then
+        if Keys.isPressed "s" || Keys.isPressed "ArrowDown" then
             velocityDirection <- velocityDirection + Vector2(0., -speed)
             
         
         let newRotation =
             let mutable playerRotation = gameState.playerRotation
-            if isKeyPressed "q" then
+            if Keys.isPressed "q" then
                 playerRotation <- playerRotation + (Math.Tau * deltaTime * 0.2)
-            if isKeyPressed "e" then
+            if Keys.isPressed "e" then
                 playerRotation <- playerRotation - (Math.Tau * deltaTime * 0.2)
             playerRotation <- playerRotation - (Math.Tau * deltaTime * float Engine.mouseX * 0.01)
             playerRotation
@@ -391,8 +351,8 @@ let GameWindow (game: Models.Game, entities: (float2f * Asset)[]) =
             // setPlayerRotation playerRotation.current
             
         // Needs to be called after every update
-        for kv in keysJustPressed do
-            keysJustPressed[kv.Key] <- false
+        for kv in Keys.justPressed do
+            Keys.justPressed[kv.Key] <- false
         
         // todo: Alternatively, use setTimeout + call requestAnimationFrame to limit frame rate
         if not gamePausedRef.current || renderSingleFrame.current then

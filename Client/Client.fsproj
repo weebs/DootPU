@@ -34,6 +34,7 @@
         <Compile Include="Lib\MVU.fs" />
         <Compile Include="Svg.Demo.fs" />
         <Compile Include="Render/Render.fs" />
+        <Compile Include="Engine.fs" />
         <Compile Include="Game.fs" />
         <Compile Include="Tests\Page.fs" />
         <Content Include="Tests\audio.html" />
