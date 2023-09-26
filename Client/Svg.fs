@@ -8,6 +8,9 @@ type Screen(width, height, ?scale) =
         ((width / 2) + x * scale), ((height / 2) - y * scale)
     member this.Width = width
     member this.Height = height
+    member this.ToScreen (x, y) =
+        // toSvgCoordinate x y
+        (width / 2) + x * scale, (height / 2) + y * scale
     member _.voxel size x y color =
         let (x, y) = toSvgCoordinate (x * size) (y * size)
         Svg.rect [
