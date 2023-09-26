@@ -200,10 +200,14 @@ let pixelsForColumn (imageData: ImageData) n size =
             for n in 0..3 do
                 yield imageData.data[(((y * int imageData.width) + x) * 4) + n]
     |]
-    
+/// The array buffer singleton drawn to    
 let mutable buffer = Unchecked.defaultof<JS.Uint8ClampedArray>
-let mutable raycastDistance: float[] = Array.empty 
+/// The depth buffer
+let mutable raycastDistance: float[] = Array.empty
+
 let skyboxColor = (0uy, 24uy, 50uy)
+
+/// Returns a new image with the given scale
 let scaleImage (scale: int) (img: ImageData) : ImageData =
     let buffer = ImageData.Create (img.width * float scale, img.height * float scale)
     for y in 0..int buffer.height - 1 do
@@ -219,16 +223,16 @@ let scaleImage (scale: int) (img: ImageData) : ImageData =
             //             buffer.data[offset + i - 1] <- img.data[imageOffset + i - 1]
     buffer
 // todo: what about when the image is out of bounds?
-let imgRgba (img: ImageData) offset =
+let readRgba (img: ImageData) offset =
     img.data[offset],
     img.data[offset + 1],
     img.data[offset + 2],
     img.data[offset + 3]
-let writeRgbToImage (img: ImageData) offset (r, g, b) =
+let writeRgb (img: ImageData) offset (r, g, b) =
     img.data[offset] <- r
     img.data[offset + 1] <- g
     img.data[offset + 2] <- b
-let writeRgbaToImage (img: ImageData) offset (r, g, b, a) =
+let writeRgba (img: ImageData) offset (r, g, b, a) =
     img.data[offset] <- r
     img.data[offset + 1] <- g
     img.data[offset + 2] <- b
@@ -240,7 +244,7 @@ let drawRectangle (x: int) (y: int) (width: int) (height: int) (color: int * int
                 if x < int buffer.width && x > 0 then
                     let color = color (x, y)
                     let offset = (y * int buffer.width + x) * 4
-                    writeRgbaToImage buffer offset color
+                    writeRgba buffer offset color
 let drawScaledSprite (img: ImageData) (position: int * int) (scale: float) (raycastDistances: float[]) spriteDistance (buffer: ImageData) =
     let imgWidth = JS.Math.round(scale * img.width) |> int
     let imgHeight = JS.Math.round(scale * img.height) |> int
@@ -259,7 +263,7 @@ let drawScaledSprite (img: ImageData) (position: int * int) (scale: float) (rayc
                         // let (r, g, b, a) = imgRgba img offset
                         let a = img.data[offset + 3]
                         if a <> 0uy then
-                            writeRgbaToImage buffer bufferOffset (imgRgba img offset)
+                            writeRgba buffer bufferOffset (readRgba img offset)
                         // for i in 0..3 do
                         //     buffer.data[bufferOffset + i] <- img.data[offset + i]
 // todo: what about when the image is out of bounds?
@@ -273,12 +277,12 @@ let drawImage (img: ImageData) (position: float2f) (buffer: ImageData) =
             if x + int position.X < int buffer.width then
                 let offset = (y * int img.width + x) * 4
                 let bufferOffset = ((y + int position.Y) * int buffer.width + (x + int position.X)) * 4
-                let (r, g, b, a) = imgRgba img offset
+                let (r, g, b, a) = readRgba img offset
                 // if (r, g, b, a) <> (255uy, 255uy, 255uy, 0uy)
                 if (r, g, b, a) <> (255uy, 255uy, 255uy, 0uy) && a <> 0uy then
                     for i in 1..4 do
                         buffer.data[bufferOffset + i - 1] <- img.data[offset + i - 1]
-let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>) position rotation =
+let drawCamera (wallTextureData: ImageData) width height (level: Map<_,_>) position rotation =
     if buffer = Unchecked.defaultof<_> then
         buffer <- JS.Constructors.Uint8ClampedArray.Create (width * height * 4)
         raycastDistance <- Array.create (width * height) 1000.0
@@ -345,7 +349,7 @@ let drawCamera (wallTextureData: ImageData) width height (level: Dictionary<_,_>
                 buffer[offset + 2] <- b
                 buffer[offset + 3] <- 255uy
                 
-                let (r, g, b, a) = imgRgba wallTextureData textureDataOffset
+                let (r, g, b, a) = readRgba wallTextureData textureDataOffset
                 // if (r, g, b) <> (255uy, 255uy, 255uy) && a <> 0uy then
                 if a <> 0uy then
                     buffer[offset] <- r
