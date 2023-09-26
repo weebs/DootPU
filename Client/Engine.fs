@@ -28,7 +28,7 @@ document.onpointerlockchange <-
         pointerState <- document.pointerLockElement = null
         console.log ev
 module Keys =
-    let mutable debugKeys = true
+    let mutable debugKeys = false
     let pressed = Dictionary<string, bool>()
     let justPressed = Dictionary<string, bool>()
     let isPressed (key: string) =
