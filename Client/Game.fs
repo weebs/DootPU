@@ -155,6 +155,52 @@ let [<Emit("document.body.requestPointerLock($0)")>] requestPointerLock args = j
 // |]
 let wallId = AssetId "image.png"
 let mutable frameCount = 0
+let cameraPlane = point(0f, 0.5f, 1f) &&& point(0f, 1f, 1f) &&& point(1f, 0.5f, 1f)
+let cameraEye = point(0f, 0.5f, 0f)
+let worldToScreen displacement inverseRotation (worldPt: float3f) =
+    let (fx, fy, fz) = rotate(point(0f, 0f, 1f), ~~~inverseRotation).Vector
+    let localPt = rotate(point(float32 worldPt.X + fx, float32 worldPt.Y + fy, float32 worldPt.Z + fz) - displacement, inverseRotation)
+    let dir = localPt &&& cameraEye
+    let pointOnCameraPlane = cameraPlane ^^^ dir
+    let (px, py, pz) = pointOnCameraPlane.Vector
+    let distanceFromPlane = distance(localPt, cameraPlane)
+    (px, py - 0.5f, pz), distanceFromPlane
+let createWorld heart blueHeart =
+    let mapData = Map.ofArray [|
+        let mapSize = mapSize * 10
+        for i in -mapSize..mapSize do
+            (i, mapSize), "pink"
+            (i, -mapSize), "pink"
+            (-mapSize , i), "pink"
+            (mapSize, i), "pink"
+        for _ in 1..80 do
+            let x = nextInt (mapSize * 2) - mapSize
+            let y = nextInt (mapSize * 2) - mapSize
+            (x, y), "green"
+        for _ in 1..80 do
+            let x = nextInt (mapSize * 2) - mapSize
+            let y = nextInt (mapSize * 2) - mapSize
+            (x, y), "blue"
+        for _ in 1..80 do
+            let x = nextInt (mapSize * 2) - mapSize
+            let y = nextInt (mapSize * 2) - mapSize
+            (x, y), "orange"
+    |]
+    // let level =
+    //     let d = Dictionary()
+    //     mapData |> Map.iter (fun key value -> d[key] <- toRgb value)
+    //     d
+    {
+        playerPosition = { X = 0.; Y = 0. }
+        playerRotation = 0.
+        entities = [|
+            { X = 2.; Y = 4. }, heart
+            for i in 1..40 do
+                { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, heart
+                { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, blueHeart
+        |]
+        Walls = mapData |> Map.map (fun _ value -> toRgb value)
+    }
 [<ReactComponent>]
 let GameWindow (scene: Models.Scene) =
     let (Image wallTexture) = scene.Assets[wallId]
@@ -282,6 +328,8 @@ let GameWindow (scene: Models.Scene) =
         // Render.drawImage itemTexture { X = -itemTexture.width; Y = -itemTexture.height } canvasData
         gameState.current.entities |> Array.sortInPlaceBy (fun (p, _) -> -1.0 * (Math.Sqrt <| (p.X - gameState.current.playerPosition.X) ** 2.0 + (p.Y - gameState.current.playerPosition.Y) ** 2.0))
         let playerPosition = gameState.current.playerPosition.Vector2
+        let pgaDisplacement = direction(float32 playerPosition.X, 0f, float32 playerPosition.Y)
+        let pgaRotationReversed = rotor(float32 -gameState.current.playerRotation, point(0f, 1f, 0f) &&& point(0f, 0f, 0f))
         let n =
             let rotationLine = point(0f, 1f, 0f) &&& point(0f, 0f, 0f)
             rotate(point(0f, 0f, 1f), rotor(float32 gameState.current.playerRotation, rotationLine))
@@ -293,10 +341,16 @@ let GameWindow (scene: Models.Scene) =
             let playerPt = { X = gameState.current.playerPosition.X; Y = gameState.current.playerPosition.Y }
             let cameraEyePt = { X = playerPt.X - n.X; Y = playerPt.Y - n.Z }
             // todo: Do camera plane calculation outside of this method since all iterations will have the same value
-            let canvasOffsetFromCenter, distanceFromPlane =
-                Render.worldCoordinatesToScreenCoordinates null playerPt (float32 gameState.current.playerRotation) entityPoint
+            let canvasOffsetFromCenter, distanceFromPlane = worldToScreen pgaDisplacement pgaRotationReversed entityPoint
+            // let canvasOffsetFromCenter, distanceFromPlane =
+            //     Render.worldCoordinatesToScreenCoordinates null playerPt (float32 gameState.current.playerRotation) entityPoint
             // let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
+            
+            // let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
+            let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter //.Vector
+            // console.log ("offset = ", canvasOffsetFromCenter)
+            
             // if renderSingleFrame.current then
                 // JS.debugger ()
             // TODO move normal calculation and isInFront to Render.world function
@@ -308,9 +362,9 @@ let GameWindow (scene: Models.Scene) =
             let isInFront = dotProduct > 0
             // console.log "dot product ="
             let distanceFromPlayer = (playerPosition - Vector2(entityPoint.X, entityPoint.Z)).Length()
-            console.log ("distance from player = ", distanceFromPlayer)
-            if isInFront && distanceFromPlayer >= 1. && MathF.Abs(offsetZ) < 0.0001f then
-                console.log ("offset = ", offsetX, offsetY)
+            // console.log ("distance from player = ", distanceFromPlayer)
+            if isInFront && distanceFromPlayer >= 1. then // && MathF.Abs(offsetZ) < 0.0001f then
+                // console.log ("offset = ", offsetX, offsetY)
                 let positionX, positionY =
                     Render.cartesianToScreen
                         (int canvasData.width) (int canvasData.height)
