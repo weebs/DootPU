@@ -13,7 +13,8 @@ open Dootverse.Models
 open Doot.Maths.Voxel.Traversal
 open Dootverse
 open PGA
-open Engine // todo
+open Engine
+open Thoth.Json // todo
 
 type Dimensions =
     abstract member top: int
@@ -110,31 +111,11 @@ let mapData' = Map.ofArray [|
 
 // let r = System.Random() TODO didn't produce random numbers?
 let nextInt max = JS.Math.round(JS.Math.random() * float max) |> int
-let mapData = Map.ofArray [|
-    let mapSize = mapSize * 10
-    for i in -mapSize..mapSize do
-        (i, mapSize), "pink"
-        (i, -mapSize), "pink"
-        (-mapSize , i), "pink"
-        (mapSize, i), "pink"
-    for _ in 1..80 do
-        let x = nextInt (mapSize * 2) - mapSize
-        let y = nextInt (mapSize * 2) - mapSize
-        (x, y), "green"
-    for _ in 1..80 do
-        let x = nextInt (mapSize * 2) - mapSize
-        let y = nextInt (mapSize * 2) - mapSize
-        (x, y), "blue"
-    for _ in 1..80 do
-        let x = nextInt (mapSize * 2) - mapSize
-        let y = nextInt (mapSize * 2) - mapSize
-        (x, y), "orange"
-|]
-let drawMinimap (screen: Screen) = [|
-    for kv in mapData do
-        let (x, y) = kv.Key
-        yield screen.voxel 40 x y kv.Value
-|]
+// let drawMinimap (screen: Screen) = [|
+//     for kv in mapData do
+//         let (x, y) = kv.Key
+//         yield screen.voxel 40 x y kv.Value
+// |]
     
 let toRgb color =
     match color with
@@ -299,7 +280,10 @@ let GameWindow (scene: Models.Scene) =
         let newPosition =
             let newPosition = gameState.playerPosition + velocityDirection
             // Revert position when colliding with a wall
-            if mapData.ContainsKey (int (Math.Floor newPosition.X), int (Math.Floor newPosition.Y)) then
+            let key = int (Math.Floor newPosition.X), int (Math.Floor newPosition.Y)
+            console.log key
+            if scene.World.Walls.ContainsKey (int (Math.Floor newPosition.X), int (Math.Floor newPosition.Y)) then
+                console.log ("colliding with wall at new position", newPosition)
                 gameState.playerPosition
             else
                 newPosition
@@ -345,7 +329,6 @@ let GameWindow (scene: Models.Scene) =
             // let canvasOffsetFromCenter, distanceFromPlane =
             //     Render.worldCoordinatesToScreenCoordinates null playerPt (float32 gameState.current.playerRotation) entityPoint
             // let canvasOffsetFromCenter, distanceFromPlane = Render.worldCoordinatesToScreenCoordinates null cameraEyePt (float32 playerRotation.current) entityPoint
-            let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
             
             // let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter.Vector
             let (offsetX, offsetY, offsetZ) = canvasOffsetFromCenter //.Vector
@@ -357,8 +340,8 @@ let GameWindow (scene: Models.Scene) =
             // let n = { X = Math.Cos playerRotation.current; Y = 0.; Z = Math.Sin playerRotation.current }
             let dotProduct = // n * (a - p)
                 n.Dot { X = entityPoint.X - (cameraEyePt.X + n.X); Y = entityPoint.Y - 0.5; Z = entityPoint.Z - (cameraEyePt.Y + n.Z) }
-            console.log ("normal = ", n)
-            console.log ("dotProduct =", dotProduct)
+            // console.log ("normal = ", n)
+            // console.log ("dotProduct =", dotProduct)
             let isInFront = dotProduct > 0
             // console.log "dot product ="
             let distanceFromPlayer = (playerPosition - Vector2(entityPoint.X, entityPoint.Z)).Length()
@@ -387,12 +370,6 @@ let GameWindow (scene: Models.Scene) =
         // console.log ("delta time = ", deltaTime * 1000.)
         lastTime <- time
         
-        // todo: use setInterval for the update loop ? avoid long waits from requestAnimationFrame when tab is not focused
-        let newState = update deltaTime gameState.current
-        gameState.current <- newState
-        Engine.mouseX <- 0
-        Engine.mouseY <- 0
-        
         // Update react elements
         if time - lastUiUpdate > uiUpdateInterval then
             lastUiUpdate <- time
@@ -400,6 +377,13 @@ let GameWindow (scene: Models.Scene) =
             setGameState gameState.current
             // setPlayerPosition playerPosition
             // setPlayerRotation playerRotation.current
+        
+        // todo: use setInterval for the update loop ? avoid long waits from requestAnimationFrame when tab is not focused
+        let newState = update deltaTime gameState.current
+        gameState.current <- newState
+        localStorage.setItem("save/world.data", Encode.Auto.toString gameState.current)
+        Engine.mouseX <- 0
+        Engine.mouseY <- 0
             
         // Needs to be called after every update
         for kv in Keys.justPressed do
@@ -488,6 +472,7 @@ let GameWindow (scene: Models.Scene) =
             ]
         ]
         Html.div [
+            Html.h4 frameTime.current
             Html.span $"{gameState.current.playerPosition}"
             Html.button [
                 prop.text "Render Single Frame"
@@ -517,11 +502,14 @@ let GameWindow (scene: Models.Scene) =
                 prop.text "Forward"
             ]
             Html.button [
+                prop.onClick (fun _ -> setGameState (createWorld (AssetId "heart.png") (AssetId "blue_heart.png")))
+                prop.text "Reset world"
+            ]
+            Html.button [
                 prop.onClick (fun _ -> setPlayerPosition (fun p -> p + Vector2(0., -0.1)))
                 prop.text "Back"
             ]
             Html.h4 $"Rotation: {gameState.current.playerRotation}"
-            Html.h4 frameTime.current
         ]
     ]
 // type [<Measure>] AssetId = class end
@@ -573,23 +561,17 @@ let createGameRoot () = promise {
     let! characterTexture = IO.loadImage "sword_character.gif"
     JS.console.log heartId
     
-    let level =
-        let d = Dictionary()
-        mapData |> Map.iter (fun key value -> d[key] <- toRgb value)
-        d
+    let world =
+        match Decode.Auto.fromString<GameWorldState> localStorage["save/world.data"] with
+        | Ok data -> data
+        | Error err ->
+            console.log err
+            let world = createWorld (fst heart) (fst blueHeart)
+            localStorage.setItem("save/world.data", Encode.Auto.toString world)
+            world
     let game = {
         Assets = Assets.All
-        World = {
-            playerPosition = { X = 0.; Y = 0. }
-            playerRotation = 0.
-            entities = [|
-                { X = 2.; Y = 4. }, fst heart
-                // for i in 1..40 do
-                //     { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, fst heart
-                //     { X = JS.Math.random() * 80.0; Y = JS.Math.random() * 80.0; }, fst blueHeart
-            |]
-            Walls = level
-        }
+        World = world
     }
     (ReactDOM.createRoot (document.getElementById "root")).render(GameWindow game)
 }

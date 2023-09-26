@@ -4,9 +4,10 @@ open System.Collections.Generic
 open Browser.Types
 open System
 open Doot.Maths.Voxel.Traversal
+open Fable.Core
 
 type console() =
-    static member debug = false
+    static member debug = true
     static member log (msg, [<ParamArray>] args) =
         if console.debug then
             Fable.Core.JS.console.log (msg, args)
@@ -24,10 +25,10 @@ type float2f =
 
 type Asset =
     Image of ImageData
-type [<Struct>] AssetId = AssetId of string    
+type [<Struct; Erase>] AssetId = AssetId of string    
 type GameWorldState = {
     playerPosition: float2f; playerRotation: float; entities: (float2f * AssetId)[]
-    Walls: Dictionary<(int * int), (byte * byte * byte)>
+    Walls: Map<(int * int), (byte * byte * byte)>
 }
     
 type Scene = {
