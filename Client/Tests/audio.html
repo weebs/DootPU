@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+    <script type="module">
+        class Audio {
+            foo(args) {
+                
+            }
+        }
+        class AudioEngine extends Audio {
+            process(inputs, outputs, parameters) {
+                const output = outputs[0]
+                output.forEach(channel => {
+
+                    // emphasis on sawWave function
+                    var value = sawWave(tick) * 0.1;
+                    for (let i = 0; i < channel.length; i++) {
+                        channel[i] = value
+                    }
+                });
+                tick++
+                return true
+            }
+        }
+        // console.log(AudioEngine)
+        // console.log(new AudioEngine())
+        let running = false
+        async function init() {
+            let audioContext = new AudioContext()
+            await audioContext.audioWorklet.addModule('./audio.ts')
+            let node = new AudioWorkletNode(audioContext, 'audio-processor')
+            node.connect(audioContext.destination)
+        }
+        window.init = () => {
+            if (!running)
+                init()
+            running = true
+        }
+        // init().then(node => console.log(node))
+    </script>
+</head>
+<body>
+
+    <button onclick="init()">Click</button>
+</body>
+</html>
