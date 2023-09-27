@@ -24,8 +24,10 @@
         <PackageReference Include="Feliz.UseElmish" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="Hooks.fs" />
         <Content Include="Notes.md" />
         <Content Include="package.json" />
+        <Compile Include="../../FableGame/bindings/three.fs" />
         <Compile Include="../Wad/Reader.fs" />
         <Compile Include="Svg.fs" />
         <Compile Include="DoomGame.fs" />
@@ -33,14 +35,15 @@
         <Compile Include="Models.fs" />
         <Compile Include="Lib\MVU.fs" />
         <Compile Include="Svg.Demo.fs" />
-        <Compile Include="Render/Render.fs" />
         <Compile Include="Engine.fs" />
         <Compile Include="MapEditor.fs" />
-        <Compile Include="Game.fs" />
+        <Compile Include="Raycast/Renderer.fs" />
+        <Compile Include="Raycast\Game.fs" />
         <Compile Include="Tests\Page.fs" />
         <Content Include="Tests\audio.html" />
-        <TypeScriptCompile Include="Tests\audio.ts" />
+<!--        <TypeScriptCompile Include="Tests\audio.ts" />-->
         <Compile Include="Tests\Rotations.fs" />
+        <Compile Include="Game.fs" />
         <Content Include="*.html" />
     </ItemGroup>
 

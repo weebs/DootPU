@@ -9,8 +9,6 @@ open Fable.Core
 open Feliz
 open Browser
 open PGA
-open Raycaster_Demo
-open Dootverse.Game
 open Dootverse
 open Dootverse.Models
 open Dootverse.Render
