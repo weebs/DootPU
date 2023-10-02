@@ -24,6 +24,7 @@
         <PackageReference Include="Feliz.UseElmish" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="Network.fs" />
         <Compile Include="Hooks.fs" />
         <Content Include="Notes.md" />
         <Content Include="package.json" />

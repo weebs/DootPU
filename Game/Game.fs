@@ -7,34 +7,34 @@ open Fable.Core
 open Dootverse
 open Browser
 open Feliz
+open Fable.Core.JsInterop
 let three: threejs.IExports = JsInterop.importAll "three"
 
 
 let inputVector () =
     let mutable velocityDirection = Vector2(0, 0)
     if Keys.isPressed "d" || Keys.isPressed "ArrowRight" then
-        velocityDirection <- velocityDirection + Vector2(1, 0.)
+        velocityDirection <- velocityDirection + Vector2(1, 0)
     if Keys.isPressed "w" || Keys.isPressed "ArrowUp" then
-        velocityDirection <- velocityDirection + Vector2(0., -1)
+        velocityDirection <- velocityDirection + Vector2(0, -1)
     if Keys.isPressed "a" || Keys.isPressed "ArrowLeft" then
-        velocityDirection <- velocityDirection + Vector2(-1, 0.)
+        velocityDirection <- velocityDirection + Vector2(-1, 0)
     if Keys.isPressed "s" || Keys.isPressed "ArrowDown" then
-        velocityDirection <- velocityDirection + Vector2(0., 1)
+        velocityDirection <- velocityDirection + Vector2(0, 1)
     velocityDirection.Normalized
 
 [<ReactComponent>]
 let Game (r: threejs.__renderers_WebGLRenderer.WebGLRenderer, scene, camera: threejs.__renderers_WebGLRenderer.Camera, sprites: threejs.__objects_Sprite.Sprite[]) =
     let divRef = React.useRef<Types.HTMLDivElement option> None
     let timeRef = React.useRef 0.0
+    let connectionRef = React.useRef null
     let rec render time =
         let dt = (time - timeRef.current) / 1000.0
         timeRef.current <- time
         r.render (scene, camera)
         
-        // console.log sprites
         // for sprite in sprites do
-        //     sprite.position.x <- sprite.position.x + (0.001 * dt)
-        //     sprite.position.z <-dsprite.position.z - (0.001 * dt)
+        //     let height = sprite.material.map.Value.image?height
         
         // Mouse capture
         if Keys.isJustPressed "tab" then
@@ -71,6 +71,8 @@ let Game (r: threejs.__renderers_WebGLRenderer.WebGLRenderer, scene, camera: thr
         // ctx.fillStyle <- U3.Case1 "blue"
         window.requestAnimationFrame render |> ignore
     React.useEffect <| fun () ->
+        connectionRef.current <- WebSocket.Create("ws://127.0.0.1:8000/ws")
+        connectionRef.current.onmessage <- fun ev -> console.log ev
         divRef.current.Value.appendChild r.domElement
         |> ignore
         window.requestAnimationFrame render
@@ -81,8 +83,7 @@ let Game (r: threejs.__renderers_WebGLRenderer.WebGLRenderer, scene, camera: thr
 
 let start () =
     let spriteName = "rsc_sprite.png"
-    let world = Raycast.Game.createWorld (AssetId "heart.png") (AssetId "heart.png")
-    
+    let world = Raycast.Game.createWorld (AssetId "heart.png") (AssetId "textures/rs/yewtree.png")
     let screenWidth = window.innerWidth
     let screenHeight = window.innerHeight
     let scene = three.Scene.Create()
@@ -109,7 +110,7 @@ let start () =
             scene.add sprite
             sprite.position.x <- pos.X
             sprite.position.z <- pos.Y
-            sprite.position.y <- 0.2
+            sprite.position.y <- 0.5
             // let spriteQuadish =
                 // let g = three.BoxGeometry.Create(1, 1, 0.01)
                 // let m = three.MeshBasicMaterial.Create(box {| map = texture |} :?> _)
@@ -121,14 +122,17 @@ let start () =
             yield sprite
             // yield spriteQuadish
     |]
-    
+    let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
+    let rscStoneWall = three.TextureLoader.Create().load "textures/rs/wall.png"
+    rscStoneWall.center <- three.Vector2.Create(0.5, 0.5)
+    rscStoneWall.rotation <- Math.Tau / 4.0
     for wall in world.Walls do
         let (x, y) = wall.Key
         let (r, g, b) = wall.Value
         let cube =
             let color = $"rgb({r}, {g}, {b})"
             let g = three.BoxGeometry.Create(1, 1, 1)
-            let m = three.MeshBasicMaterial.Create(box {| color = color |} :?> _)
+            let m = three.MeshBasicMaterial.Create(box {| map = treesTexture; |} :?> _)
             three.Mesh.Create(g, m)
         // threejs draws cubes with their center point at the position
         cube.position.x <- float x - 0.5
