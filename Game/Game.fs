@@ -27,7 +27,8 @@ let inputVector () =
 let Game (r: threejs.__renderers_WebGLRenderer.WebGLRenderer, scene, camera: threejs.__renderers_WebGLRenderer.Camera, sprites: threejs.__objects_Sprite.Sprite[]) =
     let divRef = React.useRef<Types.HTMLDivElement option> None
     let timeRef = React.useRef 0.0
-    let connectionRef = React.useRef null
+    let connectionRef = React.useRef<Types.WebSocket> null
+    let peers = React.useRef Map.empty
     let rec render time =
         let dt = (time - timeRef.current) / 1000.0
         timeRef.current <- time
@@ -59,6 +60,17 @@ let Game (r: threejs.__renderers_WebGLRenderer.WebGLRenderer, scene, camera: thr
         camera.position.x <- camera.position.x + input.X
         camera.position.z <- camera.position.z + input.Y
         
+        if connectionRef.current <> null then
+            connectionRef.current.send (
+                Encode.Auto.toString<Network.ClientMessage> (
+                     Network.Update {
+                          Position = { x = camera.position.x; y = camera.position.y; z = camera.position.z; }
+                          Rotation = camera.rotation.y
+                    }
+                )
+            )
+            
+        
         // todo: Reset this automatically? Look at Raycast.Game loop to see everything
         Engine.mouseX <- 0
         Engine.mouseY <- 0
@@ -71,8 +83,40 @@ let Game (r: threejs.__renderers_WebGLRenderer.WebGLRenderer, scene, camera: thr
         // ctx.fillStyle <- U3.Case1 "blue"
         window.requestAnimationFrame render |> ignore
     React.useEffect <| fun () ->
-        connectionRef.current <- WebSocket.Create("ws://127.0.0.1:8000/ws")
-        connectionRef.current.onmessage <- fun ev -> console.log ev
+        let c = WebSocket.Create("ws://127.0.0.1:8000/ws")
+        c.onmessage <- fun ev ->
+            match Decode.Auto.fromString<Network.ServerMessage> (string ev.data) with
+            | Ok message ->
+                match message with
+                | Network.UpdatePlayer (id, state) ->
+                    let sprite =
+                        if not (peers.current.ContainsKey id) then
+                            let loader = three.TextureLoader.Create()
+                            let texture = loader.load "heart.png"
+                            let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
+                            let sprite = three.Sprite.Create m
+                            scene.add sprite
+                            |> ignore
+                            sprite
+                        else
+                            peers.current[id]
+                    sprite.position.x <- state.Position.x
+                    sprite.position.y <- state.Position.y
+                    sprite.position.z <- state.Position.z
+                    sprite.rotation.y <- state.Rotation
+                | Network.PlayerDisconnected id ->
+                    if peers.current.ContainsKey id then
+                        scene.remove peers.current[id]
+                        |> ignore
+                        peers.current <- peers.current.Remove id
+                | _else ->
+                    console.log _else
+            | Error err -> console.log err
+            console.log ev
+        c.onopen <- fun ev ->
+            connectionRef.current <- c
+        c.onclose <- fun ev ->
+            connectionRef.current <- null
         divRef.current.Value.appendChild r.domElement
         |> ignore
         window.requestAnimationFrame render
