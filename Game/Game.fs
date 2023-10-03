@@ -44,6 +44,7 @@ type Game(world: world.World, width, height) =
     member this.Renderer = renderer
     member this.Camera = camera
     member this.ThreeJsScene = gfxScene
+    member this.World = world
     member this.Scene = scene
     member this.LoadScene (scene: Network.Scene) =
         for kv in scene.Walls do
@@ -56,7 +57,6 @@ type Game(world: world.World, width, height) =
     
     member this.RenderPhysics () =
         let debugInfo = world.debugRender()
-        console.log debugInfo
         geometry.setAttribute(!^ "position", U2.Case1 (three.BufferAttribute.Create(box debugInfo.vertices :?> _, 3))) |> ignore
         // geometry.setAttribute(!^ "position", U2.Case1 (three.BufferAttribute.Create(box [| 0f; 0f; 0f; 10f; 10f; 10f |] :?> _, 3))) |> ignore
         geometry.setAttribute(!^ "color", !^ three.BufferAttribute.Create(box (debugInfo.colors.map(fun c -> c)) :?> _, 4)) |> ignore
@@ -90,10 +90,14 @@ let GameView (game: Game) =
     let timeRef = React.useRef 0.0
     let connectionRef = React.useRef<Types.WebSocket> null
     let peers = React.useRef Map.empty
+    
+    let ccRef = React.useRef<character_controller.KinematicCharacterController> null
+    let ccCollider = React.useRef<Rapier.collider.Collider> null
+    // let ccRigidbody = React.useRef null
     let camera = game.Camera
     let scene = game.ThreeJsScene
     let r = game.Renderer
-    game.DebugPhysics <- false
+    // game.DebugPhysics <- false
     let rec update (dt: float) =
         // for sprite in sprites do
         //     let height = sprite.material.map.Value.image?height
@@ -118,8 +122,33 @@ let GameView (game: Game) =
         let input = inputVector ()
         let playerRotation = -camera.rotation.y
         let input = (Render.rotateVector playerRotation input).Normalized * dt * speed
-        camera.position.x <- camera.position.x + input.X
-        camera.position.z <- camera.position.z + input.Y
+        // camera.position.x <- camera.position.x + input.X
+        // camera.position.z <- camera.position.z + input.Y
+        // ccCollider.current.setTranslation(RAPIER.Vector3.Create(camera.position.x, camera.position.y, camera.position.z))
+        
+        // Character controller update
+        let initialPos = ccCollider.current.translation()
+        let destination = RAPIER.Vector3.Create(initialPos.x + input.X, 0, initialPos.z + input.Y)
+        let desiredInput = RAPIER.Vector3.Create(input.X, 0, input.Y)
+        ccRef.current.computeColliderMovement(ccCollider.current, desiredInput)
+        let correctedMovement = ccRef.current.computedMovement()
+        // let correctedDestination = RAPIER.Vector3.Create(initialPos.x + (correctedMovement.x * dt), 0, initialPos.z + (correctedMovement.z * dt))
+        let correctedDestination = RAPIER.Vector3.Create(initialPos.x + correctedMovement.x, 0, initialPos.z + correctedMovement.z)
+        ccCollider.current.setTranslation(correctedDestination)
+        for i in 0..int (ccRef.current.numComputedCollisions()) - 1 do
+            console.log (ccRef.current.computedCollision i)
+        // ccCollider.current.setTranslation(correctedMovement)
+        
+        // ccRef.current.computeColliderMovement(ccCollider.current, destination)
+        // let movement = ccRef.current.computedMovement()
+        // ccRigidbody.current.setLinvel(RAPIER.Vector3.Create(movement.x, 0, movement.z), true)
+        
+        // let pos = ccRigidbody.current.translation()
+        // let pos = correctedDestination
+        let pos = ccCollider.current.translation()
+        // camera.position.x <- pos.x
+        // camera.position.y <- pos.y
+        // camera.position.z <- pos.z
         
         if connectionRef.current <> null then
             connectionRef.current.send (
@@ -134,9 +163,18 @@ let GameView (game: Game) =
         let dt = (time - timeRef.current) / 1000.0
         timeRef.current <- time
         game.Step(dt, ignore, update)
-        let context = game.Renderer.domElement.getContext_experimental_webgl()
+        // let context = game.Renderer.domElement.getContext_experimental_webgl()
         window.requestAnimationFrame loop |> ignore
     React.useEffect <| fun () ->
+        // Setup player controller
+        ccRef.current <- game.World.createCharacterController(0.01)
+        // ccRigidbody.current <- game.World.createRigidBody(RAPIER.RigidBodyDesc.dynamic())
+        ccCollider.current <-
+            game.World.createCollider(
+                RAPIER.ColliderDesc.capsule(0.3, 0.22)) //,
+                // ccRigidbody.current)
+        
+        // Setup connection to server and respond to messages
         let c = WebSocket.Create("ws://127.0.0.1:8000/ws")
         c.onmessage <- fun ev ->
             match Decode.Auto.fromString<Network.ServerMessage> (string ev.data) with
