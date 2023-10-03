@@ -133,10 +133,37 @@ let GameView (game: Game) =
         ccRef.current.computeColliderMovement(ccCollider.current, desiredInput)
         let correctedMovement = ccRef.current.computedMovement()
         // let correctedDestination = RAPIER.Vector3.Create(initialPos.x + (correctedMovement.x * dt), 0, initialPos.z + (correctedMovement.z * dt))
-        let correctedDestination = RAPIER.Vector3.Create(initialPos.x + correctedMovement.x, 0, initialPos.z + correctedMovement.z)
+        let correctedDestination = RAPIER.Vector3.Create(initialPos.x + correctedMovement.x, 1, initialPos.z + correctedMovement.z)
         ccCollider.current.setTranslation(correctedDestination)
-        for i in 0..int (ccRef.current.numComputedCollisions()) - 1 do
+        for i in 0..Math.Min(1, int (ccRef.current.numComputedCollisions())) - 1 do
+            let collision = ccRef.current.computedCollision(i)
+            let normal = collision.Value.normal1
+            let v =
+                RAPIER.Vector3.Create(input.X - collision.Value.normal1.x, 0.0 - collision.Value.normal1.y, input.Y - collision.Value.normal1.z)
+            let dot = input.X * collision.Value.normal1.x + input.Y * collision.Value.normal1.z
+            let updatedInput = RAPIER.Vector3.Create(v.x * dot, v.y * dot, v.z * dot)
+            console.log dot
+            
+            // let dotCorrection = input.X * updatedInput.z + input.Y * updatedInput.z
+            // console.log ("dot = ", dotCorrection)
+            // From stackoverflow
+            let undesiredMotion = RAPIER.Vector3.Create(normal.x * dot, normal.y * dot, normal.z * dot)
+            let updatedInput = RAPIER.Vector3.Create(input.X - undesiredMotion.x, 0.0 - undesiredMotion.y, input.Y - undesiredMotion.z)
+            // if dotCorrection > 0 then
+            ccCollider.current.setTranslation(RAPIER.Vector3.Create(
+                initialPos.x + collision.Value.translationApplied.x + updatedInput.x,
+                1,
+                initialPos.z + collision.Value.translationApplied.z + updatedInput.z))
             console.log (ccRef.current.computedCollision i)
+            console.log updatedInput
+        // let initialPos = ccCollider.current.translation()
+        // let destination = RAPIER.Vector3.Create(initialPos.x + input.X, 0, initialPos.z + input.Y)
+        // let desiredInput = RAPIER.Vector3.Create(input.X, 0, input.Y)
+        // ccRef.current.computeColliderMovement(ccCollider.current, desiredInput)
+        // let correctedMovement = ccRef.current.computedMovement()
+        // let correctedDestination = RAPIER.Vector3.Create(initialPos.x + (correctedMovement.x * dt), 0, initialPos.z + (correctedMovement.z * dt))
+        // let correctedDestination = RAPIER.Vector3.Create(initialPos.x + correctedMovement.x, 0, initialPos.z + correctedMovement.z)
+        // ccCollider.current.setTranslation(correctedDestination)
         // ccCollider.current.setTranslation(correctedMovement)
         
         // ccRef.current.computeColliderMovement(ccCollider.current, destination)
@@ -146,9 +173,9 @@ let GameView (game: Game) =
         // let pos = ccRigidbody.current.translation()
         // let pos = correctedDestination
         let pos = ccCollider.current.translation()
-        // camera.position.x <- pos.x
+        camera.position.x <- pos.x
         // camera.position.y <- pos.y
-        // camera.position.z <- pos.z
+        camera.position.z <- pos.z
         
         if connectionRef.current <> null then
             connectionRef.current.send (
@@ -166,6 +193,8 @@ let GameView (game: Game) =
         // let context = game.Renderer.domElement.getContext_experimental_webgl()
         window.requestAnimationFrame loop |> ignore
     React.useEffect <| fun () ->
+        // let floorBody, floorCollider, floorMesh =
+            // game.Scene.AddCube(true, { x = 200.0; y = 1.0; z = 200.0 }, { x = 0; y = -0.5; z = 0 }, {| color = "blue" |})
         // Setup player controller
         ccRef.current <- game.World.createCharacterController(0.01)
         // ccRigidbody.current <- game.World.createRigidBody(RAPIER.RigidBodyDesc.dynamic())
@@ -249,83 +278,16 @@ let start () = promise {
     camera.position.y <- observerHeight
     camera.position.z <- 4
     
-    // let world = Raycast.Game.createScene treeSprite treeSprite
-    // let sprites = [|
-    //     let loader = three.TextureLoader.Create()
-    //     for (pos, AssetId url) in world.entities do
-    //         let texture = loader.load url
-    //         let sprite =
-    //             let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
-    //             three.Sprite.Create m
-    //         scene.add sprite
-    //         sprite.position.x <- pos.X
-    //         sprite.position.z <- pos.Y
-    //         sprite.position.y <- 0.5
-    //         // let spriteQuadish =
-    //             // let g = three.BoxGeometry.Create(1, 1, 0.01)
-    //             // let m = three.MeshBasicMaterial.Create(box {| map = texture |} :?> _)
-    //             // three.Mesh.Create(g, m)
-    //         // scene.add spriteQuadish
-    //         // spriteQuadish.position.x <- pos.X
-    //         // spriteQuadish.position.z <- pos.Y
-    //         // spriteQuadish.position.y <- 0.2
-    //         yield sprite
-    //         // yield spriteQuadish
-    // |]
     // let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
     // let rscStoneWall = three.TextureLoader.Create().load "textures/rs/wall.png"
     // rscStoneWall.center <- three.Vector2.Create(0.5, 0.5)
     // rscStoneWall.rotation <- Math.Tau / 4.0
-    // for wall in world.Walls do
-    //     let (x, y) = wall.Key
-    //     let (r, g, b) = wall.Value
-    //     let color = $"rgb({r}, {g}, {b})"
-    //     game.Scene.AddCube(true, { x = 1; y = 1; z = 1 }, { x = float x - 0.5; y = 0.5; z = float y + 0.5 }, {| map = treesTexture |})
-    //     |> ignore
-        
-        // let cube =
-        //     let color = $"rgb({r}, {g}, {b})"
-        //     let g = three.BoxGeometry.Create(1, 1, 1)
-        //     let m = three.MeshBasicMaterial.Create(box {| map = treesTexture; |} :?> _)
-        //     three.Mesh.Create(g, m)
-        // // threejs draws cubes with their center point at the position
-        // cube.position.x <- float x - 0.5
-        // cube.position.y <- 0.5
-        // cube.position.z <- float y + 0.5
-        // scene.add(cube)
-        // |> ignore
-    // Floor
-    // let floor =
-        // let g = three.BoxGeometry.Create(200, 1, 200)
-        // let m = three.MeshBasicMaterial.Create(box {| color = "grey" |} :?> _)
-        // three.Mesh.Create(g, m)
-    // floor.position.y <- -0.5
-    // camera.up.y <- 1
-    // camera.up.set (1, 1, -1)
-    // scene.add floor
-    let floorBody, floorCollider, floorMesh =
-        game.Scene.AddCube(true, { x = 200.0; y = 1.0; z = 200.0 }, { x = 0; y = -0.5; z = 0 }, {| color = "blue" |})
-    // let cube =
-    //     let g = three.BoxGeometry.Create(1, 1, 1)
-    //     let m = three.MeshBasicMaterial.Create(box {| color = "blue" |} :?> _)
-    //     three.Mesh.Create(g, m)
-    // scene.add(cube)
-    // cube.position.x <- 0.5
-    // cube.position.y <- 0.5
-    // cube.position.z <- 0
-    // let cubeObj = scene.add(cube)
-    // cubeObj.rot
-    // cube.rotation.z <- 0.2
     r.setSize (screenWidth, screenHeight)
     window.onresize <- fun _ ->
         console.log "resize"
         r.setSize(window.innerWidth, window.innerHeight)
         camera.aspect <- window.innerWidth / window.innerHeight
         camera.updateProjectionMatrix()
-    // document.body.appendChild r.domElement
-    // |> ignore
-    // r.render (scene, camera)
-    // console.log scene
     console.log three
     document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (GameView game)
 }
