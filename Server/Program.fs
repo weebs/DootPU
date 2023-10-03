@@ -7,6 +7,7 @@ open System.Threading
 open WatsonWebsocket
 open Thoth.Json.Net
 
+let scene = Network.Scene.createScene ()
 type Server() =
     let mutable clients = Map.empty
     let server = new WatsonWsServer("127.0.0.1", 8000)
@@ -15,9 +16,13 @@ type Server() =
         return ()
     }
     let onClientConnected (event: ConnectionEventArgs) =
+        printfn $"{event.Client.Guid} connected"
         clients <- clients.Add (event.Client.Guid, event.Client)
+        sendMsg event.Client.Guid (Network.WorldState scene)
+        |> ignore
         
     let onClientDisconnected (event: DisconnectionEventArgs) =
+        printfn $"{event.Client.Guid} disconnected"
         clients <- clients.Remove event.Client.Guid
         for id in clients.Keys do
             server.SendAsync (id, Encode.Auto.toString (Network.PlayerDisconnected event.Client.Guid))

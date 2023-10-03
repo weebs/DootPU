@@ -5,7 +5,7 @@ open Doot.Maths.Voxel.Traversal
 open Dootverse.Client
 open Dootverse.Client.Svg
 open Fable.Core
-// open Fable.Core.JS
+open Fable.Core.JsInterop
 open Feliz
 open Browser
 open PGA
@@ -13,13 +13,13 @@ open Dootverse
 open Dootverse.Models
 open Dootverse.Render
 
+let RAPIER: RAPIER.IExports = JsInterop.importAll "@dimforge/rapier3d-compat"
+let three: threejs.IExports = JsInterop.importAll "three"
 
 let (x, y) = (0., 10.)
 let (x1, y1) = (10., 10.)
 
 let theta = System.Math.Tau / 4.
-// let theta = 0f
-let RAPIER: RAPIER.IExports = JsInterop.importAll "@dimforge/rapier3d-compat"
 
 type svg with
     static member cx x = svg.cx (int x)
@@ -252,4 +252,118 @@ let run () = promise {
     |> Seq.iter (printfn "%A")
     document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (RenderingTests.WorldToScreenCoordinates ())
 }
+    
+[<ReactComponent>]
+let CubeDemo () =
+    let divRef = React.useRef<HTMLDivElement option> None
+    React.useEffect <| fun () ->
+        let renderer = three.WebGLRenderer.Create()
+        let scene = three.Scene.Create()
+        let width = 800.0
+        let height = 400.0
+        let fov, nearClip, farClip = 70, 0.1, 10000
+        let camera = three.PerspectiveCamera.Create(fov, width / height, nearClip, farClip)
+        camera.position.y <- 1
+        camera.position.z <- 4
+        scene.add camera |> ignore
+        
+        let box =
+            let geometry = three.BoxGeometry.Create(1, 1, 1)
+            let material = three.MeshBasicMaterial.Create(box {| color = "blue" |} :?> _)
+            three.Mesh.Create(geometry, material)
+        scene.add box |> ignore
+        divRef.current.Value.appendChild renderer.domElement |> ignore
+        renderer.setSize (width, height)
+        renderer.render (scene, camera)
+    Html.div [
+        prop.ref divRef
+    ]
+
+
+[<ReactComponent>]
+let RapierLinesDemo () =
+    let divRef = React.useRef<HTMLDivElement option> None
+    React.useEffect <| fun () ->
+        promise {
+            do! RAPIER.init()
+            let physicsWorld = RAPIER.World.Create(RAPIER.Vector3.Create(0, -9.81, 0))
+            
+            let width, height = 800.0, 400.0
+            let renderer = three.WebGLRenderer.Create()
+            renderer.setSize (width, height)
+            let scene = three.Scene.Create()
+            let c = three.Color.Create(1, 1, 1)
+            scene.background <- box c :?> _
+            let fov, nearClip, farClip = 70, 0.1, 10000
+            let camera = three.PerspectiveCamera.Create(fov, width / height, nearClip, farClip)
+            camera.position.y <- 1
+            camera.position.z <- 4
+            scene.add camera
+            |> ignore
+            
+            
+            // Set up scene
+            
+            let cube =
+                let geometry = three.BoxGeometry.Create(1, 1, 1)
+                let material = three.MeshBasicMaterial.Create(box {| color = "blue" |} :?> _)
+                three.Mesh.Create(geometry, material)
+            scene.add cube
+            |> ignore
+            
+            
+            console.log cube.position
+            let physicsCubeBody = physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(cube.position.x, cube.position.y, cube.position.z))
+            // todo Rapier uses the cube radius while threejs uses the cube size
+            let physicsCubeCollider = physicsWorld.createCollider(RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5), physicsCubeBody)
+            
+            let material = three.LineBasicMaterial.Create(box {| color = 0x888888; vertexColors = true |} :?> _)
+            let geometry = three.BufferGeometry.Create()
+            
+            let lines = three.Line.Create(geometry, material)
+            scene.add lines |> ignore
+            lines.visible <- true
+            
+            // Add scene to component
+            divRef.current.Value.appendChild renderer.domElement |> ignore
+            // Render scene
+            let rec render time =
+                let debugInfo = physicsWorld.debugRender()
+                geometry.setAttribute(!^ "position", U2.Case1 (three.BufferAttribute.Create(box debugInfo.vertices :?> _, 3))) |> ignore
+                // geometry.setAttribute(!^ "position", U2.Case1 (three.BufferAttribute.Create(box [| 0f; 0f; 0f; 10f; 10f; 10f |] :?> _, 3))) |> ignore
+                geometry.setAttribute(!^ "color", !^ three.BufferAttribute.Create(box (debugInfo.colors.map(fun c -> c)) :?> _, 4)) |> ignore
+                // geometry.setAttribute(!^ "color", !^ three.BufferAttribute.Create(box [| 100f; 1f; 1f; 1f; 1f; 1f; 1f; 1f |] :?> _, 4)) |> ignore
+                // console.log debugInfo
+                physicsWorld.step()
+                renderer.render (scene, camera)
+                window.requestAnimationFrame render |> ignore
+            window.requestAnimationFrame render |> ignore
+        } |> ignore
+    Html.div [
+        prop.ref divRef
+        prop.children [
+            Html.button [ prop.text "Demo" ]
+        ]
+    ]
+let tests = [
+    // "PGA3D and Rapier + local storage demo", run >> ignore
+    "Cube", CubeDemo
+    "Rapier debug lines demo", RapierLinesDemo
+]
+
+[<ReactComponent>]
+let TestsPage () =
+    let state, setState = React.useState (RapierLinesDemo ())
+    Html.div [
+        for (key, value) in tests do
+            Html.h4 [
+                prop.text key
+                prop.onClick (fun _ -> setState (value ()))
+            ]
+        state
+    ]
+    
+let rec showUnitTests () =
+    document.getElementById "root" |> ReactDOM.createRoot |> fun root -> root.render (TestsPage ())
+    
 // console.log ("distance (0, 2) from (0, 1) -> (1, 1) = ", distanceFromLine (Vector2(0f, 1f)) (Vector2(1f, 1f)) (Vector2(8f, 11f)))

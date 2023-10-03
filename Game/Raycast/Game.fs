@@ -141,7 +141,7 @@ let worldToScreen displacement inverseRotation (worldPt: float3f) =
     let (px, py, pz) = pointOnCameraPlane.Vector
     let distanceFromPlane = distance(localPt, cameraPlane)
     (px, py - 0.5f, pz), distanceFromPlane
-let createWorld heart blueHeart =
+let createScene heart blueHeart =
     let mapData = Map.ofArray [|
         let mapSize = mapSize * 10
         for i in -mapSize..mapSize do
@@ -172,7 +172,7 @@ let createWorld heart blueHeart =
         playerRotation = 0.
         entities = [|
             { X = 2.; Y = 4. }, heart
-            for i in 1..4000 do
+            for i in 1..400 do
                 { X = JS.Math.random() * area - (area / 2.0); Y = JS.Math.random() * area - (area / 2.0); }, heart
                 { X = JS.Math.random() * area - (area / 2.0); Y = JS.Math.random() * area - (area / 2.0); }, blueHeart
         |]
@@ -498,7 +498,7 @@ let GameWindow (scene: Models.Scene) =
                 prop.text "Forward"
             ]
             Html.button [
-                prop.onClick (fun _ -> setGameState (createWorld (AssetId "heart.png") (AssetId "blue_heart.png")))
+                prop.onClick (fun _ -> setGameState (createScene (AssetId "heart.png") (AssetId "blue_heart.png")))
                 prop.text "Reset world"
             ]
             Html.button [
@@ -562,7 +562,7 @@ let createGameRoot () = promise {
         | Ok data -> data
         | Error err ->
             console.log err
-            let world = createWorld (fst heart) (fst blueHeart)
+            let world = createScene (fst heart) (fst blueHeart)
             localStorage.setItem("save/world.data", Encode.Auto.toString world)
             world
     let game = {

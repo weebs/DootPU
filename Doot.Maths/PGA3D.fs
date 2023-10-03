@@ -1,4 +1,4 @@
-﻿module PGA
+﻿namespace PGA
 // Written by a generator written by enki.
 // using System;
 // using System.Text
@@ -8,10 +8,10 @@ open System.Text
 
 // namespace PGA
 // (* { *)
-let _basis = [|  "1"; "e0"; "e1"; "e2"; "e3"; "e01"; "e02"; "e03"; "e12"; "e31"; "e23"; "e021"; "e013"; "e032"; "e123"; "e0123"  |]
 type PGA3D(?f: float32, ?idx: int) =
     // just for debug and print output, the basis names
     let _mVec: float32[] = Array.zeroCreate 16
+    static let _basis = [|  "1"; "e0"; "e1"; "e2"; "e3"; "e01"; "e02"; "e03"; "e12"; "e31"; "e23"; "e021"; "e013"; "e032"; "e123"; "e0123"  |]
     do
         match f, idx with
         | Some value, Some index ->
@@ -602,9 +602,9 @@ type PGA3D(?f: float32, ?idx: int) =
     static member e1 = new PGA3D(1f, 2);
     static member e2 = new PGA3D(1f, 3);
     static member e3 = new PGA3D(1f, 4);
-open type PGA3D
-let inline (^^^) a b = PGA3D.(^^^) (a, b)
-type PGA3D with
+// open type PGA3D
+// let inline (^^^) a b = PGA3D.(^^^) (a, b)
+// type PGA3D with
     member this.X = this.normalized()[13]
     member this.Y = this.normalized()[12]
     member this.Z = this.normalized()[11]

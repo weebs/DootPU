@@ -14,6 +14,7 @@
 
     <ItemGroup>
 <!--        <Compile Include="../PGA/Library.fs" />-->
+        <PackageReference Include="Fable.Browser.WebGL" Version="1.2.0" />
         <PackageReference Include="Fable.Browser.WebRTC" Version="1.5.0" />
         <PackageReference Include="Fable.Core" Version="4.0.0" />
         <PackageReference Include="Fable.Fetch" Version="2.6.0" />
@@ -24,11 +25,14 @@
         <PackageReference Include="Feliz.UseElmish" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="..\..\FableGame\bindings\three.fs">
+          <Link>three.fs</Link>
+        </Compile>
+        <Compile Include="JsImports.fs" />
         <Compile Include="Network.fs" />
         <Compile Include="Hooks.fs" />
         <Content Include="Notes.md" />
         <Content Include="package.json" />
-        <Compile Include="../../FableGame/bindings/three.fs" />
         <Compile Include="../Wad/Reader.fs" />
         <Compile Include="Svg.fs" />
         <Compile Include="DoomGame.fs" />

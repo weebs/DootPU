@@ -1,4 +1,4 @@
-module Dootverse.Engine
+namespace Dootverse
 
 open System
 open System.Collections.Generic
@@ -11,22 +11,23 @@ open Doot.Maths.Voxel.Traversal
 open Dootverse
 open PGA
 
-let mutable mouseX = 0
-let mutable mouseY = 0
-document.body.onmousemove <- fun ev ->
-    if document.pointerLockElement <> null then
-        mouseX <- mouseX + int ev.movementX
-        mouseY <- mouseY + int ev.movementY
-    else
-        mouseX <- 0
-        mouseY <- 0
-    
-let mutable pointerState = document.pointerLockElement = null
-document.onpointerlockchange <-
-    fun ev ->
-        console.log ("element = ", document.pointerLockElement)
-        pointerState <- document.pointerLockElement = null
-        console.log ev
+module Engine =
+    let mutable mouseX = 0
+    let mutable mouseY = 0
+    document.body.onmousemove <- fun ev ->
+        if document.pointerLockElement <> null then
+            mouseX <- mouseX + int ev.movementX
+            mouseY <- mouseY + int ev.movementY
+        else
+            mouseX <- 0
+            mouseY <- 0
+        
+    let mutable pointerState = document.pointerLockElement = null
+    document.onpointerlockchange <-
+        fun ev ->
+            console.log ("element = ", document.pointerLockElement)
+            pointerState <- document.pointerLockElement = null
+            console.log ev
 module Keys =
     let mutable debugKeys = false
     let pressed = Dictionary<string, bool>()
@@ -51,4 +52,7 @@ module Keys =
     window.onblur <- fun _ ->
         for kv in pressed do
             pressed[kv.Key.ToLower()] <- false
+            
+type Game() =
+    class end
 

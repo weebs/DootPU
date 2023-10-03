@@ -280,7 +280,7 @@ type File() =
         // for info in headers do
         //     printfn $"{info.Name} - {info.Size} - {info.FilePos}"
         headers
-let parseFable (bytes: Mixins.BinaryReader) (reader: Mixins.BinaryReader -> 't) (lump: Lump) : 't[] =
+let parseFable (bytes: Mixins.BinaryReader) (reader: BinaryReader -> 't) (lump: Lump) : 't[] =
     let r = Mixins.BinaryReader(Mixins.MemoryStream(bytes.Buffer.slice(lump.FilePos, lump.FilePos + lump.Size)))
     let start = r.BaseStream.Position
     let mutable offset = int64 0
@@ -292,7 +292,8 @@ let parseFable (bytes: Mixins.BinaryReader) (reader: Mixins.BinaryReader -> 't) 
             //     let t = reader r
             // else
         // for i in 1..(lump.Size / sizeof<'t>) do
-            yield reader r
+            // todo
+            // todo yield reader r
             offset <- r.BaseStream.Position - start
     |]
 let parseLevelFable (dataView: Mixins.BinaryReader) (level: Map<string, Lump>) : Level =

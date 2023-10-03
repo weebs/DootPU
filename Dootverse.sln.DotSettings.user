@@ -1,23 +1,23 @@
 ﻿<wpf:ResourceDictionary xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 	
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=40c24fe7_002D7733_002D4da2_002Db7fb_002D6f1a8cd9d52f/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="intersection of two lines produces a euclidean point #3" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
-  &lt;TestAncestor&gt;
-    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.find points along ray in voxel grid&lt;/TestId&gt;
-    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.infinite seq works&lt;/TestId&gt;
-  &lt;/TestAncestor&gt;
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=40c24fe7_002D7733_002D4da2_002Db7fb_002D6f1a8cd9d52f/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="intersection of two lines produces a euclidean point #3" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.find points along ray in voxel grid&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.infinite seq works&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=af0bff77_002D0ada_002D4a62_002D9e75_002D48d538a238cf/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="intersection of two lines produces a euclidean point #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
-  &lt;TestAncestor&gt;
-    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.intersection of two lines produces a euclidean point&lt;/TestId&gt;
-  &lt;/TestAncestor&gt;
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=af0bff77_002D0ada_002D4a62_002D9e75_002D48d538a238cf/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="intersection of two lines produces a euclidean point #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.intersection of two lines produces a euclidean point&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=bfc485c4_002D1c63_002D4110_002Da7f3_002D79fc6e1562fc/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="intersection of two lines produces a euclidean point #4" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
-  &lt;TestAncestor&gt;
-    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.find points along ray in voxel grid&lt;/TestId&gt;
-  &lt;/TestAncestor&gt;
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=bfc485c4_002D1c63_002D4110_002Da7f3_002D79fc6e1562fc/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="intersection of two lines produces a euclidean point #4" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.find points along ray in voxel grid&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=ef98b5c5_002D4537_002D4fa6_002D8fc9_002D2a9755e7cbd6/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="intersection of two lines produces a euclidean point" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
-  &lt;TestAncestor&gt;
-    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.find points along ray in voxel grid&lt;/TestId&gt;
-  &lt;/TestAncestor&gt;
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=ef98b5c5_002D4537_002D4fa6_002D8fc9_002D2a9755e7cbd6/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="intersection of two lines produces a euclidean point" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::CDF84C91-68B3-4F06-93C3-4CED77F50424::net6.0::Doot.Tests.VoxelTraversal.find points along ray in voxel grid&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
