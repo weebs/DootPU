@@ -287,6 +287,23 @@ let GameView (game: Game) =
         |> ignore
     Html.div [
         prop.ref divRef
+        prop.style [
+            style.width (length.vw 100)
+            style.height (length.vh 100)
+            style.overflow.hidden
+        ]
+        prop.children [
+            Html.img [
+                prop.src "textures/double_barrel_shotgun.png"
+                prop.width (length.percent 20)
+                prop.height length.auto
+                prop.style [
+                    style.position.absolute
+                    style.right (length.percent 25)
+                    style.bottom (length.percent -10)
+                ]
+            ]
+        ]
     ]
 let start () = promise {
     do! RAPIER.init ()
