@@ -9,6 +9,7 @@ open Browser
 open Feliz
 open Fable.Core.JsInterop
 open Thoth.Json
+open query_pipeline
 
 type Scene(world: world.World, scene: threejs.__scenes_Scene.Scene) =
     member this.AddCube(staticPos, size: Network.float3, pos: Network.float3, ?meshProps: obj) =
@@ -40,7 +41,7 @@ type Game(world: world.World, width, height) =
         gfxScene.add lines |> ignore
         lines.visible <- true
         lines
-    member val DebugPhysics = true with get, set
+    member val DebugPhysics = false with get, set
     member this.Renderer = renderer
     member this.Camera = camera
     member this.ThreeJsScene = gfxScene
@@ -157,6 +158,7 @@ let GameView (game: Game) =
             // let dotCorrection = input.X * updatedInput.z + input.Y * updatedInput.z
             // console.log ("dot = ", dotCorrection)
             // From stackoverflow
+            // https://gamedev.stackexchange.com/questions/4059/how-to-make-the-player-slide-smoothly-against-terrain
             let undesiredMotion = RAPIER.Vector3.Create(normal.x * dot, normal.y * dot, normal.z * dot)
             let updatedInput = RAPIER.Vector3.Create(input.X - undesiredMotion.x, 0.0 - undesiredMotion.y, input.Y - undesiredMotion.z)
             // if dotCorrection > 0 then
@@ -226,9 +228,8 @@ let GameView (game: Game) =
                             let texture = loader.load "textures/doom/guy.png"
                             let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
                             let sprite = three.Sprite.Create m
-                            sprite.scale.set(0.5, 0.5, 0.5)
-                            scene.add sprite
-                            |> ignore
+                            sprite.scale.set(0.5, 0.5, 0.5) |> ignore
+                            scene.add sprite |> ignore
                             peers.current <- peers.current.Add (id, sprite)
                             sprite
                         else
