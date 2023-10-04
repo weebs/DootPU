@@ -49,15 +49,15 @@ module Scene =
                 (i, -mapSize), "pink"
                 (-mapSize , i), "pink"
                 (mapSize, i), "pink"
-            for _ in 1..80 do
+            for _ in 1..800 do
                 let x = nextInt (mapSize * 2) - mapSize
                 let y = nextInt (mapSize * 2) - mapSize
                 (x, y), "green"
-            for _ in 1..80 do
+            for _ in 1..800 do
                 let x = nextInt (mapSize * 2) - mapSize
                 let y = nextInt (mapSize * 2) - mapSize
                 (x, y), "blue"
-            for _ in 1..80 do
+            for _ in 1..800 do
                 let x = nextInt (mapSize * 2) - mapSize
                 let y = nextInt (mapSize * 2) - mapSize
                 (x, y), "orange"
@@ -69,7 +69,7 @@ module Scene =
         let area = float mapSize * 10.0 * 2.0
         {
             Entities = Map.ofArray [|
-                for i in 1..400 do
+                for i in 1..2000 do
                     i, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); }
                     i, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); }
             |]
