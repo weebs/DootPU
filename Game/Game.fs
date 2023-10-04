@@ -109,6 +109,20 @@ let GameView (game: Game) =
             else
                 document.exitPointerLock ()
                 
+        if Engine.mouse1 then
+            let x = -1.0 * Math.Sin camera.rotation.y
+            let z = -1.0 * Math.Cos camera.rotation.y
+            let dir = RAPIER.Vector3.Create(x, 0, z)
+            let ray = RAPIER.Ray.Create(RAPIER.Vector3.Create(camera.position.x, camera.position.y, camera.position.z), dir)
+            let raycast = game.World.castRay(ray, 10000, true, QueryFilterFlags.ALL_SHAPES)
+            let hitPoint = ray.pointAt(raycast.Value.toi)
+            game.Scene.AddCube(true, { x = 0.02; y = 0.02; z = 0.02 }, { x = hitPoint.x; y = hitPoint.y; z = hitPoint.z }, {| color = "blue" |})
+            |> ignore
+            console.log ("camera position =", camera.position.x, camera.position.y, camera.position.z)
+            console.log ("hit point =", hitPoint)
+            console.log ("dir = ", x, z)
+            console.log raycast
+                
         if Keys.isPressed "q" then
             camera.rotation.y <- camera.rotation.y + (2.0 * dt)
         if Keys.isPressed "e" then
@@ -234,10 +248,31 @@ let GameView (game: Game) =
                         peers.current <- peers.current.Remove id
                 | Network.WorldState world ->
                     let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
+                    let rsTreeTexture = three.TextureLoader.Create().load "textures/rs/yewtree.png"
                     for wall in world.Walls do
                         let x, y = wall.Key
-                        game.Scene.AddCube(true, { x = 1; y = 1; z = 1 }, { x = float x - 0.5; y = 0.5; z = float y + 0.5 }, {| map = treesTexture |})
+                        game.Scene.AddCube(
+                            true,
+                            { x = 1
+                              y = if Math.Abs x = 100 || Math.Abs y = 100 then 40 else 1
+                              z = 1 },
+                            { x = float x - 0.5
+                              y = if Math.Abs x = 100 || Math.Abs y = 100 then 20 else 0.5
+                              z = float y + 0.5 },
+                            {| map = treesTexture |}
+                        ) |> ignore
+                    for kv in world.Entities do
+                        let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
+                        let sprite = three.Sprite.Create m
+                        game.World.createCollider(
+                            RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                            game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                                kv.Value.x, kv.Value.y, kv.Value.z)))
                         |> ignore
+                        sprite.position.x <- kv.Value.x
+                        sprite.position.y <- kv.Value.y
+                        sprite.position.z <- kv.Value.z
+                        scene.add sprite |> ignore
                 | _else ->
                     console.log _else
             | Error err -> console.log err
