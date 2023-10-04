@@ -66,12 +66,8 @@ type Game(world: world.World, width, height) =
         gfxUpdate time
         if this.DebugPhysics then this.RenderPhysics()
         renderer.render(gfxScene, camera)
-        // todo: Reset this automatically? Look at Raycast.Game loop to see everything
-        Engine.mouseX <- 0
-        Engine.mouseY <- 0
-        for kv in Keys.justPressed do
-            Keys.justPressed[kv.Key] <- false
         
+        Engine.endInputFrame ()
 
 let inputVector () =
     let mutable velocityDirection = Vector2(0, 0)
