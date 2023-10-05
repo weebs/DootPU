@@ -15,6 +15,7 @@ type PlayerState =
     
 type ClientMessage =
     | Update of PlayerState
+    | DestroyedEntity of id: int
     
 type Scene = {
     Walls: Map<int * int, byte * byte * byte>
@@ -25,6 +26,7 @@ type ServerMessage =
     | UpdatePlayer of Guid * PlayerState
     | PlayerDisconnected of Guid
     | WorldState of Scene
+    | EntityRemoved of int 
     
 module Scene =
     let mapSize = 10

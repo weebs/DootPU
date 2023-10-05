@@ -1,6 +1,7 @@
 module Dootverse.Client.Game
 
 open System
+open System.Collections.Generic
 open Doot.Maths.Voxel.Traversal
 open Dootverse
 open Dootverse.Models
@@ -87,6 +88,9 @@ let GameView (game: Game) =
     let timeRef = React.useRef 0.0
     let connectionRef = React.useRef<Types.WebSocket> null
     let peers = React.useRef Map.empty
+    let spriteMap = React.useRef (Dictionary<int, threejs.__objects_Sprite.Sprite>())
+    let colliderMap = React.useRef (Dictionary<int, Rapier.collider.Collider>())
+    let idMap = React.useRef (Dictionary<Rapier.collider.Collider, int>())
     
     let ccRef = React.useRef<character_controller.KinematicCharacterController> null
     let ccCollider = React.useRef<Rapier.collider.Collider> null
@@ -119,6 +123,13 @@ let GameView (game: Game) =
             console.log ("hit point =", hitPoint)
             console.log ("dir = ", x, z)
             console.log raycast
+            if idMap.current.ContainsKey raycast.Value.collider then
+                let id = idMap.current[raycast.Value.collider]
+                connectionRef.current.send (Encode.Auto.toString (Network.DestroyedEntity id))
+                scene.remove spriteMap.current[id]
+                |> ignore
+                // spriteMap.current.Remove id
+                // |> ignore
                 
         if Keys.isPressed "q" then
             camera.rotation.y <- camera.rotation.y + (2.0 * dt)
@@ -261,15 +272,25 @@ let GameView (game: Game) =
                     for kv in world.Entities do
                         let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
                         let sprite = three.Sprite.Create m
-                        game.World.createCollider(
-                            RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
-                            game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
-                                kv.Value.x, kv.Value.y, kv.Value.z)))
-                        |> ignore
+                        let collider =
+                            game.World.createCollider(
+                                RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                                game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                                    kv.Value.x, kv.Value.y, kv.Value.z)))
                         sprite.position.x <- kv.Value.x
                         sprite.position.y <- kv.Value.y
                         sprite.position.z <- kv.Value.z
-                        scene.add sprite |> ignore
+                        let instance = scene.add sprite
+                        spriteMap.current.Add(kv.Key, sprite)
+                        colliderMap.current.Add(kv.Key, collider)
+                        idMap.current.Add(collider, kv.Key)
+                | Network.EntityRemoved id ->
+                    let collider = colliderMap.current[id]
+                    let sprite = spriteMap.current[id]
+                    colliderMap.current.Remove id |> ignore
+                    spriteMap.current.Remove id |> ignore
+                    scene.remove sprite |> ignore
+                    game.World.removeCollider (collider, false)
                 | _else ->
                     console.log _else
             | Error err -> console.log err
