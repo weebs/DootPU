@@ -17,13 +17,17 @@ type GameServer(world: world.World, scene: Network.Scene) =
     let mutable scene = scene
     let mutable clientConnection: Map<Guid, Browser.Types.RTCDataChannel> = Map.empty
     let sendMsg id (msg: Network.ServerMessage) =
-        let c = clientConnection[id]
-        let mutable i = 0
-        let msg = Encode.Auto.toString msg
-        while i < msg.Length do
-            c.send !^ (msg.Substring(i, Math.Min(msg.Length - i, 1024)))
-            i <- i + 1024
-        c.send !^ "\r\n"
+        try
+            let c = clientConnection[id]
+            let mutable i = 0
+            let msg = Encode.Auto.toString msg
+            while i < msg.Length do
+                c.send !^ (msg.Substring(i, Math.Min(msg.Length - i, 1024)))
+                i <- i + 1024
+            c.send !^ "\r\n"
+        with error ->
+            JS.debugger ()
+            console.log error
     let broadcastMsg id msg =
         match id with
         | Some id ->
@@ -61,7 +65,11 @@ type GameServer(world: world.World, scene: Network.Scene) =
         // c.ondatachannel <- fun ev ->
         // channel.onerror <- fun ev -> console.log ev
         c.ondatachannel <- fun ev -> console.log ev
-        c.onconnectionstatechange <- fun ev -> console.log ev
+        c.onconnectionstatechange <- fun ev ->
+            if ev.target?connectionState = "disconnected" then
+                clientConnection <- clientConnection.Remove id
+                broadcastMsg (Some id) (Network.PlayerDisconnected id)
+            console.log ev
         channel.onopen <- fun ev ->
             clientConnection <- clientConnection.Add (id, channel)
             if channel.readyState = RTCDataChannelState.Open then
@@ -91,7 +99,13 @@ type GameServer(world: world.World, scene: Network.Scene) =
 
 let start () = promise {
     do! RAPIER.init ()
-    let c = WebSocket.Create "ws://127.0.0.1:8000/ws"
+    let endpoint =
+        document.baseURI
+            .Replace("http:", "ws:")
+            .Replace("https:", "wss:")
+            .Replace("dedicated_server.html", "ws")
+    JS.debugger ()
+    let c = WebSocket.Create endpoint
     c.onopen <- fun ev ->
         let server = GameServer(
             RAPIER.World.Create(RAPIER.Vector3.Create(0, -9.81, 0)),

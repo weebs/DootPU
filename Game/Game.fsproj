@@ -53,5 +53,8 @@
         <Compile Include="Game.Server.fs" />
         <Content Include="*.html" />
     </ItemGroup>
+    <ItemGroup>
+      <TypeScriptCompile Include="vite.config.ts" />
+    </ItemGroup>
 
 </Project>
