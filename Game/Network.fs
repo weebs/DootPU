@@ -1,6 +1,19 @@
 ﻿module Dootverse.Network
 open System
+open Fable.Core
 
+type WebRtcRequest =
+    {
+        Offer: string
+        Candidates: (string * string option)[]
+    }
+
+type WebRtcResponse =
+    {
+        Answer: string
+        Candidates: (string * string option)[]
+    }
+    
 type float3 =
     { x: float; y: float; z: float }
     member inline this.Tuple = (this.x, this.y, this.z)
@@ -26,7 +39,19 @@ type ServerMessage =
     | UpdatePlayer of Guid * PlayerState
     | PlayerDisconnected of Guid
     | WorldState of Scene
-    | EntityRemoved of int 
+    | EntityRemoved of int
+    
+module LobbyConnection =
+    type [<Struct; Erase>] LobbyId = LobbyId of System.Guid
+    type ClientMessage =
+        | Connect of Guid * WebRtcRequest
+        | ConnectionResponse of Guid * WebRtcResponse
+        | HostLobby of name: string
+        | RefreshLobbies
+    type ServerMessage =
+        | ConnectionResponse of WebRtcResponse
+        | ConnectionRequest of Guid * WebRtcRequest
+        | Lobbies of {| id: Guid; name: string; playerCount: int |}[]
     
 module Scene =
     let mapSize = 10

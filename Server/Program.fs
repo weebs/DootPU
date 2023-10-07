@@ -1,59 +1,71 @@
 ﻿module Dootverse.Server
 
-// open Dootverse
 open System
 open System.Text
-open System.Threading
 open WatsonWebsocket
 open Thoth.Json.Net
 
-let mutable scene = Network.Scene.createScene ()
 type Server() =
     let mutable clients = Map.empty
+    let mutable lobbies = Map.empty
     let server = new WatsonWsServer("127.0.0.1", 8000)
-    let sendMsg id (msg: Network.ServerMessage) = task {
-        let! _ = server.SendAsync (id, Encode.Auto.toString msg)
-        return ()
+    let agent = MailboxProcessor<Guid * string>.Start <| fun recv -> async {
+        while true do
+            let! id, msg = recv.Receive()
+            let! _ = (server.SendAsync (id, msg) |> Async.AwaitTask)
+            ()
     }
-    let broadcastMsg id msg = task {
+    let sendMsg id (msg: Network.LobbyConnection.ServerMessage) =
+        agent.Post (id, Encode.Auto.toString msg)
+        // task {
+        //     let! _ = server.SendAsync (id, Encode.Auto.toString msg)
+        //     return ()
+        // }
+    let broadcastMsg id msg =
         match id with
         | Some id ->
             let clientIds = clients.Keys
             for clientId in clientIds do
                 if id <> clientId then
-                    do! sendMsg clientId msg
+                    sendMsg clientId msg
         | None ->
             let clientIds = clients.Keys
             for clientId in clientIds do
-                do! sendMsg clientId msg
-    }
+                sendMsg clientId msg
+    let getLobbies () =
+        lobbies
+        |> Seq.map (fun kv -> {| id = kv.Key; name = fst kv.Value; playerCount = 0 |})
+        |> Seq.toArray
     let onClientConnected (event: ConnectionEventArgs) =
         printfn $"{event.Client.Guid} connected"
         clients <- clients.Add (event.Client.Guid, event.Client)
-        sendMsg event.Client.Guid (Network.WorldState scene)
+        sendMsg event.Client.Guid (Network.LobbyConnection.Lobbies (getLobbies ()))
         |> ignore
         
     let onClientDisconnected (event: DisconnectionEventArgs) =
+        // todo: Remove lobby from list
         printfn $"{event.Client.Guid} disconnected"
         clients <- clients.Remove event.Client.Guid
-        for id in clients.Keys do
-            server.SendAsync (id, Encode.Auto.toString (Network.PlayerDisconnected event.Client.Guid))
-            |> ignore
+        lobbies <- lobbies.Remove event.Client.Guid
+        // for id in clients.Keys do
+        //     server.SendAsync (id, Encode.Auto.toString (Network.PlayerDisconnected event.Client.Guid))
+        //     |> ignore
 
     let onMessage (event: MessageReceivedEventArgs) =
-        match Decode.Auto.fromString<Network.ClientMessage> (Encoding.UTF8.GetString(event.Data)) with
+        match Decode.Auto.fromString<Network.LobbyConnection.ClientMessage> (Encoding.UTF8.GetString(event.Data)) with
         | Ok message ->
             match message with
-            | Network.Update state ->
-                task {
-                    let clients = clients.Keys
-                    for clientId in clients do
-                        if clientId <> event.Client.Guid then
-                            do! sendMsg clientId (Network.UpdatePlayer (event.Client.Guid, state))
-                } |> ignore
-            | Network.DestroyedEntity id ->
-                scene <- { scene with Entities = scene.Entities.Remove(id) }
-                broadcastMsg None (Network.EntityRemoved id) |> ignore
+            | Network.LobbyConnection.Connect(lobbyId, webRtcRequest) ->
+                sendMsg lobbyId (Network.LobbyConnection.ConnectionRequest (event.Client.Guid, webRtcRequest))
+                |> ignore
+            | Network.LobbyConnection.HostLobby name ->
+                lobbies <- lobbies.Add(event.Client.Guid, (name, 0))
+            | Network.LobbyConnection.RefreshLobbies ->
+                sendMsg event.Client.Guid (Network.LobbyConnection.Lobbies (getLobbies ()))
+                |> ignore
+            | Network.LobbyConnection.ConnectionResponse (clientId, webRtcRequest) ->
+                sendMsg clientId (Network.LobbyConnection.ServerMessage.ConnectionResponse webRtcRequest)
+                |> ignore
         | Error err ->
             printfn "%A" err
     do

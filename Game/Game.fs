@@ -12,7 +12,67 @@ open Fable.Core.JsInterop
 open Thoth.Json
 open query_pipeline
 
+type Component = struct end
+// type Entity = struct end
+// type GameWorld(world: world.World) =
+//     let entities = Map<Entity, Component list>
+
+type ServerCmd =
+    | AddEnemy
+    | AddPlayer
+    | DamageEnemy
+type GameServer(world: world.World, scene: Network.Scene) =
+    let mutable scene = scene
+    let mutable clientConnection: Map<Guid, Browser.Types.RTCDataChannel> = Map.empty
+    let sendMsg id (msg: Network.ServerMessage) =
+        clientConnection[id].send !^ (Encode.Auto.toString msg)
+    let broadcastMsg id msg =
+        match id with
+        | Some id ->
+            let clientIds = clientConnection.Keys
+            for clientId in clientIds do
+                if id <> clientId then
+                    sendMsg clientId msg
+        | None ->
+            let clientIds = clientConnection.Keys
+            for clientId in clientIds do
+                sendMsg clientId msg
+    let onMessage (clientGuid: Guid) (message: Network.ClientMessage) =
+        match message with
+        | Network.Update state ->
+            let clients = clientConnection.Keys
+            for clientId in clients do
+                if clientId <> clientGuid then
+                    sendMsg clientId (Network.UpdatePlayer (clientGuid, state))
+        | Network.DestroyedEntity id ->
+            console.log ("destroy entity id", id)
+            scene <- { scene with Entities = scene.Entities.Remove(id) }
+            broadcastMsg None (Network.EntityRemoved id) |> ignore
+    // let entities = Map<int, Component list>
+    member this.AddClient id client =
+        clientConnection <- clientConnection.Add (id, client)
+    member this.AnswerRequest request = promise {
+        let! c, _, response = RTC.JS.answerRequest request
+        let id = Guid.NewGuid()
+        c.ondatachannel <- fun ev ->
+            // ev.channel.onmessage <- fun ev ->
+            //     console.log "server data channel message"
+            //     console.log ev
+            ev.channel.onmessage <- fun ev -> onMessage id (Decode.Auto.unsafeFromString (string ev.data))
+            console.log ("server data channel open", ev.channel)
+            clientConnection <- clientConnection.Add (id, ev.channel)
+            sendMsg id (Network.WorldState scene)
+        return response
+    }
+    member this.AddEnemy() =
+        ()
+    member this.AddPlayer() = ()
+    member this.DamageEnemy() =
+        ()
+    member this.Step() =
+        []
 type Scene(world: world.World, scene: threejs.__scenes_Scene.Scene) =
+    // let world = GameWorld(world)
     member this.AddCube(staticPos, size: Network.float3, pos: Network.float3, ?meshProps: obj) =
         let desc = if staticPos then RAPIER.RigidBodyDesc.newStatic() else RAPIER.RigidBodyDesc.newDynamic()
         let rigidBody = world.createRigidBody(desc.setTranslation(pos.Tuple))
@@ -49,6 +109,38 @@ type Game(world: world.World, width, height) =
     member this.World = world
     member this.Scene = scene
     member this.LoadScene (scene: Network.Scene) =
+        let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
+        let rsTreeTexture = three.TextureLoader.Create().load "textures/rs/yewtree.png"
+        for wall in scene.Walls do
+            let x, y = wall.Key
+            this.Scene.AddCube(
+                true,
+                { x = 1
+                  y = if Math.Abs x = 100 || Math.Abs y = 100 then 40 else 1
+                  z = 1 },
+                { x = float x - 0.5
+                  y = if Math.Abs x = 100 || Math.Abs y = 100 then 20 else 0.5
+                  z = float y + 0.5 },
+                {| map = treesTexture |}
+            ) |> ignore
+        for kv in scene.Entities do
+            let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
+            let sprite = three.Sprite.Create m
+            let collider =
+                this.World.createCollider(
+                    RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                    this.World.createRigidBody(
+                        RAPIER.RigidBodyDesc.newStatic()
+                            .setTranslation(kv.Value.x, kv.Value.y, kv.Value.z)))
+            sprite.position.x <- kv.Value.x
+            sprite.position.y <- kv.Value.y
+            sprite.position.z <- kv.Value.z
+            let instance = this.ThreeJsScene.add sprite
+            // todo
+            ()
+            // spriteMap.current.Add(kv.Key, sprite)
+            // colliderMap.current.Add(kv.Key, collider)
+            // idMap.current.Add(collider, kv.Key)
         for kv in scene.Walls do
             let x, z = kv.Key
             this.Scene.AddCube(true, { x = 1; y = 1; z = 1; }, { x = float x - 0.5; y = 0.5; z = float z - 0.5 })
@@ -86,7 +178,7 @@ let inputVector () =
 let GameView (game: Game) =
     let divRef = React.useRef<Types.HTMLDivElement option> None
     let timeRef = React.useRef 0.0
-    let connectionRef = React.useRef<Types.WebSocket> null
+    let connectionRef = React.useRef<Types.RTCDataChannel option> None
     let peers = React.useRef Map.empty
     let spriteMap = React.useRef (Dictionary<int, threejs.__objects_Sprite.Sprite>())
     let colliderMap = React.useRef (Dictionary<int, Rapier.collider.Collider>())
@@ -116,20 +208,27 @@ let GameView (game: Game) =
             let dir = RAPIER.Vector3.Create(x, 0, z)
             let ray = RAPIER.Ray.Create(RAPIER.Vector3.Create(camera.position.x, camera.position.y, camera.position.z), dir)
             let raycast = game.World.castRay(ray, 10000, true, QueryFilterFlags.ALL_SHAPES)
-            let hitPoint = ray.pointAt(raycast.Value.toi)
-            game.Scene.AddCube(true, { x = 0.02; y = 0.02; z = 0.02 }, { x = hitPoint.x; y = hitPoint.y; z = hitPoint.z }, {| color = "blue" |})
-            |> ignore
-            console.log ("camera position =", camera.position.x, camera.position.y, camera.position.z)
-            console.log ("hit point =", hitPoint)
-            console.log ("dir = ", x, z)
-            console.log raycast
-            if idMap.current.ContainsKey raycast.Value.collider then
-                let id = idMap.current[raycast.Value.collider]
-                connectionRef.current.send (Encode.Auto.toString (Network.DestroyedEntity id))
-                scene.remove spriteMap.current[id]
+            match raycast with
+            | Some raycast ->
+                let hitPoint = ray.pointAt(raycast.toi)
+                game.Scene.AddCube(true, { x = 0.02; y = 0.02; z = 0.02 }, { x = hitPoint.x; y = hitPoint.y; z = hitPoint.z }, {| color = "blue" |})
                 |> ignore
-                // spriteMap.current.Remove id
-                // |> ignore
+                console.log ("camera position =", camera.position.x, camera.position.y, camera.position.z)
+                console.log ("hit point =", hitPoint)
+                console.log ("dir = ", x, z)
+                console.log raycast
+                if idMap.current.ContainsKey raycast.collider then
+                    let id = idMap.current[raycast.collider]
+                    connectionRef.current |> Option.iter (fun c ->
+                        let msg = Encode.Auto.toString (Network.DestroyedEntity id)
+                        console.log msg
+                        console.log c
+                        c.send !^ msg)
+                    scene.remove spriteMap.current[id]
+                    |> ignore
+                    // spriteMap.current.Remove id
+                    // |> ignore
+            | None -> ()
                 
         if Keys.isPressed "q" then
             camera.rotation.y <- camera.rotation.y + (2.0 * dt)
@@ -200,21 +299,25 @@ let GameView (game: Game) =
         // camera.position.y <- pos.y
         camera.position.z <- pos.z
         
-        if connectionRef.current <> null then
-            connectionRef.current.send (
-                Encode.Auto.toString<Network.ClientMessage> (
-                     Network.Update {
-                          Position = { x = camera.position.x; y = camera.position.y; z = camera.position.z; }
-                          Rotation = camera.rotation.y
-                    }
+        try
+            if connectionRef.current.IsSome then
+                connectionRef.current.Value.send !^ (
+                    Encode.Auto.toString<Network.ClientMessage> (
+                         Network.Update {
+                              Position = { x = camera.position.x; y = camera.position.y; z = camera.position.z; }
+                              Rotation = camera.rotation.y
+                        }
+                    )
                 )
-            )
+        with error -> console.log error
     let rec loop time =
-        let dt = (time - timeRef.current) / 1000.0
-        timeRef.current <- time
-        game.Step(dt, ignore, update)
-        // let context = game.Renderer.domElement.getContext_experimental_webgl()
-        window.requestAnimationFrame loop |> ignore
+        try
+            let dt = (time - timeRef.current) / 1000.0
+            timeRef.current <- time
+            game.Step(dt, ignore, update)
+            // let context = game.Renderer.domElement.getContext_experimental_webgl()
+            window.requestAnimationFrame loop |> ignore
+        with error -> console.log error
     React.useEffect <| fun () ->
         // let floorBody, floorCollider, floorMesh =
             // game.Scene.AddCube(true, { x = 200.0; y = 1.0; z = 200.0 }, { x = 0; y = -0.5; z = 0 }, {| color = "blue" |})
@@ -227,82 +330,114 @@ let GameView (game: Game) =
                 // ccRigidbody.current)
         
         // Setup connection to server and respond to messages
-        let c = WebSocket.Create("ws://127.0.0.1:8000/ws")
-        c.onmessage <- fun ev ->
-            match Decode.Auto.fromString<Network.ServerMessage> (string ev.data) with
-            | Ok message ->
-                match message with
-                | Network.UpdatePlayer (id, state) ->
-                    let sprite =
-                        if not (peers.current.ContainsKey id) then
-                            let loader = three.TextureLoader.Create()
-                            let texture = loader.load "textures/doom/guy.png"
-                            let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
-                            let sprite = three.Sprite.Create m
-                            sprite.scale.set(0.5, 0.5, 0.5) |> ignore
-                            scene.add sprite |> ignore
-                            peers.current <- peers.current.Add (id, sprite)
-                            sprite
+        promise {
+            let! clientConnection, clientDataChannel, request = RTC.JS.createConnection ()
+            let websocket = WebSocket.Create("ws://127.0.0.1:8000/ws")
+            websocket.onmessage <- fun ev ->
+                match Decode.Auto.fromString<Network.LobbyConnection.ServerMessage> (string ev.data) with
+                | Ok message ->
+                    match message with
+                    | Network.LobbyConnection.ServerMessage.ConnectionResponse webRtcResponse ->
+                        console.log "got response"
+                        console.log webRtcResponse
+                        promise {
+                            do! clientConnection.setRemoteDescription (toPlainJsObj {| ``type`` = "answer"; sdp = webRtcResponse.Answer |} :?> _)
+                            for (candidate, sdpMid) in webRtcResponse.Candidates do
+                                do! clientConnection.addIceCandidate (toPlainJsObj {| candidate = candidate; sdpMid = sdpMid |} :?> _)
+                            clientDataChannel.onopen <- fun ev ->
+                                console.log "client data channel open"
+                                console.log ev
+                                connectionRef.current <- Some clientDataChannel
+                        } |> ignore
+                    | Network.LobbyConnection.ConnectionRequest _ -> failwith "todo"
+                    | Network.LobbyConnection.Lobbies foo ->
+                        if foo.Length > 0 then
+                            websocket.send (Encode.Auto.toString (Network.LobbyConnection.Connect (foo[0].id, request)))
                         else
-                            peers.current[id]
-                    sprite.position.x <- state.Position.x
-                    sprite.position.y <- state.Position.y
-                    sprite.position.z <- state.Position.z
-                    sprite.rotation.y <- state.Rotation
-                | Network.PlayerDisconnected id ->
-                    if peers.current.ContainsKey id then
-                        scene.remove peers.current[id]
-                        |> ignore
-                        peers.current <- peers.current.Remove id
-                | Network.WorldState world ->
-                    let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
-                    let rsTreeTexture = three.TextureLoader.Create().load "textures/rs/yewtree.png"
-                    for wall in world.Walls do
-                        let x, y = wall.Key
-                        game.Scene.AddCube(
-                            true,
-                            { x = 1
-                              y = if Math.Abs x = 100 || Math.Abs y = 100 then 40 else 1
-                              z = 1 },
-                            { x = float x - 0.5
-                              y = if Math.Abs x = 100 || Math.Abs y = 100 then 20 else 0.5
-                              z = float y + 0.5 },
-                            {| map = treesTexture |}
-                        ) |> ignore
-                    for kv in world.Entities do
-                        let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
-                        let sprite = three.Sprite.Create m
-                        let collider =
-                            game.World.createCollider(
-                                RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
-                                game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
-                                    kv.Value.x, kv.Value.y, kv.Value.z)))
-                        sprite.position.x <- kv.Value.x
-                        sprite.position.y <- kv.Value.y
-                        sprite.position.z <- kv.Value.z
-                        let instance = scene.add sprite
-                        spriteMap.current.Add(kv.Key, sprite)
-                        colliderMap.current.Add(kv.Key, collider)
-                        idMap.current.Add(collider, kv.Key)
-                | Network.EntityRemoved id ->
-                    let collider = colliderMap.current[id]
-                    let sprite = spriteMap.current[id]
-                    colliderMap.current.Remove id |> ignore
-                    spriteMap.current.Remove id |> ignore
-                    scene.remove sprite |> ignore
-                    game.World.removeCollider (collider, false)
-                | _else ->
-                    console.log _else
-            | Error err -> console.log err
-            // console.log ev
-        c.onopen <- fun ev ->
-            connectionRef.current <- c
-        c.onclose <- fun ev ->
-            connectionRef.current <- null
-        divRef.current.Value.appendChild r.domElement
-        |> ignore
-        window.requestAnimationFrame loop
-        |> ignore
+                            promise {
+                                do! Promise.sleep 500
+                                console.log "No lobbies found, refreshing"
+                                websocket.send (Encode.Auto.toString Network.LobbyConnection.RefreshLobbies)
+                            } |> ignore
+                | error ->
+                    JS.debugger ()
+                    console.log error
+            clientDataChannel.onmessage <- fun ev ->
+                match Decode.Auto.fromString<Network.ServerMessage> (string ev.data) with
+                | Ok message ->
+                    match message with
+                    | Network.UpdatePlayer (id, state) ->
+                        let sprite =
+                            if not (peers.current.ContainsKey id) then
+                                let loader = three.TextureLoader.Create()
+                                let texture = loader.load "textures/doom/guy.png"
+                                let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
+                                let sprite = three.Sprite.Create m
+                                sprite.scale.set(0.5, 0.5, 0.5) |> ignore
+                                scene.add sprite |> ignore
+                                peers.current <- peers.current.Add (id, sprite)
+                                sprite
+                            else
+                                peers.current[id]
+                        sprite.position.x <- state.Position.x
+                        sprite.position.y <- state.Position.y
+                        sprite.position.z <- state.Position.z
+                        sprite.rotation.y <- state.Rotation
+                    | Network.PlayerDisconnected id ->
+                        if peers.current.ContainsKey id then
+                            scene.remove peers.current[id]
+                            |> ignore
+                            peers.current <- peers.current.Remove id
+                    | Network.WorldState world ->
+                        let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
+                        let rsTreeTexture = three.TextureLoader.Create().load "textures/rs/yewtree.png"
+                        for wall in world.Walls do
+                            let x, y = wall.Key
+                            game.Scene.AddCube(
+                                true,
+                                { x = 1
+                                  y = if Math.Abs x = 100 || Math.Abs y = 100 then 40 else 1
+                                  z = 1 },
+                                { x = float x - 0.5
+                                  y = if Math.Abs x = 100 || Math.Abs y = 100 then 20 else 0.5
+                                  z = float y + 0.5 },
+                                {| map = treesTexture |}
+                            ) |> ignore
+                        for kv in world.Entities do
+                            let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
+                            let sprite = three.Sprite.Create m
+                            let collider =
+                                game.World.createCollider(
+                                    RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                                    game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                                        kv.Value.x, kv.Value.y, kv.Value.z)))
+                            sprite.position.x <- kv.Value.x
+                            sprite.position.y <- kv.Value.y
+                            sprite.position.z <- kv.Value.z
+                            let instance = scene.add sprite
+                            spriteMap.current.Add(kv.Key, sprite)
+                            colliderMap.current.Add(kv.Key, collider)
+                            idMap.current.Add(collider, kv.Key)
+                    | Network.EntityRemoved id ->
+                        let collider = colliderMap.current[id]
+                        let sprite = spriteMap.current[id]
+                        colliderMap.current.Remove id |> ignore
+                        spriteMap.current.Remove id |> ignore
+                        scene.remove sprite |> ignore
+                        game.World.removeCollider (collider, false)
+                    | _else ->
+                        console.log _else
+                | Error err -> console.log err
+                // console.log ev
+            clientDataChannel.onopen <- fun ev ->
+                connectionRef.current <- Some clientDataChannel
+            clientDataChannel.onclose <- fun ev ->
+                connectionRef.current <- Unchecked.defaultof<_>
+            divRef.current.Value.appendChild r.domElement
+            |> ignore
+            window.requestAnimationFrame loop
+            |> ignore
+        } |> ignore
     Html.div [
         prop.ref divRef
         prop.style [
@@ -325,6 +460,8 @@ let GameView (game: Game) =
     ]
 let start () = promise {
     do! RAPIER.init ()
+    // let! response = server.AnswerRequest request
+    // console.log response
     let spriteName = AssetId "rsc_sprite.png"
     let treeSprite = AssetId "textures/rs/yewtree.png"
     let heartSprite = AssetId "heart.png"
