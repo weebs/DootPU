@@ -30,6 +30,7 @@
         </Compile>
         <Compile Include="JsImports.fs" />
         <Compile Include="Network.fs" />
+        <Compile Include="RTC.JS.fs" />
         <Compile Include="Hooks.fs" />
         <Content Include="Notes.md" />
         <Content Include="package.json" />
@@ -49,6 +50,7 @@
 <!--        <TypeScriptCompile Include="Tests\audio.ts" />-->
         <Compile Include="Tests\Rotations.fs" />
         <Compile Include="Game.fs" />
+        <Compile Include="Game.Server.fs" />
         <Content Include="*.html" />
     </ItemGroup>
 
