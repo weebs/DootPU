@@ -2,6 +2,7 @@ module Dootverse.Client.Game
 
 open System
 open System.Collections.Generic
+open Browser.Types
 open Doot.Maths.Voxel.Traversal
 open Dootverse
 open Dootverse.Models
@@ -17,60 +18,6 @@ type Component = struct end
 // type GameWorld(world: world.World) =
 //     let entities = Map<Entity, Component list>
 
-type ServerCmd =
-    | AddEnemy
-    | AddPlayer
-    | DamageEnemy
-type GameServer(world: world.World, scene: Network.Scene) =
-    let mutable scene = scene
-    let mutable clientConnection: Map<Guid, Browser.Types.RTCDataChannel> = Map.empty
-    let sendMsg id (msg: Network.ServerMessage) =
-        clientConnection[id].send !^ (Encode.Auto.toString msg)
-    let broadcastMsg id msg =
-        match id with
-        | Some id ->
-            let clientIds = clientConnection.Keys
-            for clientId in clientIds do
-                if id <> clientId then
-                    sendMsg clientId msg
-        | None ->
-            let clientIds = clientConnection.Keys
-            for clientId in clientIds do
-                sendMsg clientId msg
-    let onMessage (clientGuid: Guid) (message: Network.ClientMessage) =
-        match message with
-        | Network.Update state ->
-            let clients = clientConnection.Keys
-            for clientId in clients do
-                if clientId <> clientGuid then
-                    sendMsg clientId (Network.UpdatePlayer (clientGuid, state))
-        | Network.DestroyedEntity id ->
-            console.log ("destroy entity id", id)
-            scene <- { scene with Entities = scene.Entities.Remove(id) }
-            broadcastMsg None (Network.EntityRemoved id) |> ignore
-    // let entities = Map<int, Component list>
-    member this.AddClient id client =
-        clientConnection <- clientConnection.Add (id, client)
-    member this.AnswerRequest request = promise {
-        let! c, _, response = RTC.JS.answerRequest request
-        let id = Guid.NewGuid()
-        c.ondatachannel <- fun ev ->
-            // ev.channel.onmessage <- fun ev ->
-            //     console.log "server data channel message"
-            //     console.log ev
-            ev.channel.onmessage <- fun ev -> onMessage id (Decode.Auto.unsafeFromString (string ev.data))
-            console.log ("server data channel open", ev.channel)
-            clientConnection <- clientConnection.Add (id, ev.channel)
-            sendMsg id (Network.WorldState scene)
-        return response
-    }
-    member this.AddEnemy() =
-        ()
-    member this.AddPlayer() = ()
-    member this.DamageEnemy() =
-        ()
-    member this.Step() =
-        []
 type Scene(world: world.World, scene: threejs.__scenes_Scene.Scene) =
     // let world = GameWorld(world)
     member this.AddCube(staticPos, size: Network.float3, pos: Network.float3, ?meshProps: obj) =
@@ -300,6 +247,7 @@ let GameView (game: Game) =
         camera.position.z <- pos.z
         
         try
+            //if connectionRef.current.IsSome && connectionRef.current.Value.readyState = RTCDataChannelState.Open then
             if connectionRef.current.IsSome then
                 connectionRef.current.Value.send !^ (
                     Encode.Auto.toString<Network.ClientMessage> (
@@ -328,6 +276,7 @@ let GameView (game: Game) =
             game.World.createCollider(
                 RAPIER.ColliderDesc.capsule(0.3, 0.22)) //,
                 // ccRigidbody.current)
+        let mutable msgQueue = []
         
         // Setup connection to server and respond to messages
         promise {
@@ -344,6 +293,7 @@ let GameView (game: Game) =
                             do! clientConnection.setRemoteDescription (toPlainJsObj {| ``type`` = "answer"; sdp = webRtcResponse.Answer |} :?> _)
                             for (candidate, sdpMid) in webRtcResponse.Candidates do
                                 do! clientConnection.addIceCandidate (toPlainJsObj {| candidate = candidate; sdpMid = sdpMid |} :?> _)
+                            clientConnection.ondatachannel <- fun ev -> console.log ev
                             clientDataChannel.onopen <- fun ev ->
                                 console.log "client data channel open"
                                 console.log ev
@@ -362,8 +312,9 @@ let GameView (game: Game) =
                 | error ->
                     JS.debugger ()
                     console.log error
-            clientDataChannel.onmessage <- fun ev ->
-                match Decode.Auto.fromString<Network.ServerMessage> (string ev.data) with
+                // todo: sometimes the messages get split
+            let onMsg msg =
+                match Decode.Auto.fromString<Network.ServerMessage> msg with
                 | Ok message ->
                     match message with
                     | Network.UpdatePlayer (id, state) ->
@@ -427,8 +378,18 @@ let GameView (game: Game) =
                         game.World.removeCollider (collider, false)
                     | _else ->
                         console.log _else
-                | Error err -> console.log err
+                | Error err ->
+                    console.log msg
+                    console.log err
                 // console.log ev
+            clientDataChannel.onmessage <- fun ev ->
+                let msg = string ev.data
+                if msg.EndsWith "\r\n" then
+                    let fullMessage = (msgQueue |> String.concat "") + msg
+                    msgQueue <- []
+                    onMsg fullMessage
+                else
+                    msgQueue <- msgQueue @ [ msg ]
             clientDataChannel.onopen <- fun ev ->
                 connectionRef.current <- Some clientDataChannel
             clientDataChannel.onclose <- fun ev ->
