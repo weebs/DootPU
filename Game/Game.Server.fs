@@ -18,8 +18,12 @@ type GameServer(world: world.World, scene: Network.Scene) =
     let mutable clientConnection: Map<Guid, Browser.Types.RTCDataChannel> = Map.empty
     let sendMsg id (msg: Network.ServerMessage) =
         let c = clientConnection[id]
-        // console.log c
-        clientConnection[id].send !^ (Encode.Auto.toString msg + "\r\n")
+        let mutable i = 0
+        let msg = Encode.Auto.toString msg
+        while i < msg.Length do
+            c.send !^ (msg.Substring(i, Math.Min(msg.Length - i, 1024)))
+            i <- i + 1024
+        c.send !^ "\r\n"
     let broadcastMsg id msg =
         match id with
         | Some id ->
