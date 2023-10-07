@@ -1,0 +1,127 @@
+module Doot.Maths.Voxel.Traversal
+
+open System
+open System.Numerics
+open Fable.Core
+
+
+// module System =
+    // module Numerics =
+    
+type Vector2(x: float32, y: float32) =
+    member this.X = x
+    member this.Y = y
+    member this.Length () = MathF.Sqrt(x ** 2f + y ** 2f)
+    static member (/) (a: Vector2, b) = Vector2(a.X / b, a.Y / b)
+    static member (*) (a: Vector2, b: float32) =
+        // let a = a / a.Length()
+        Vector2(a.X * b, a.Y * b)
+// #if FABLE_COMPILER
+// open System.Numerics
+// #endif
+
+/// Credit: http://www.cse.yorku.ca/~amana/research/grid.pdf
+let initialize (voxelWidth: int) (u: Vector2) (v: Vector2) =
+    let vNormalized = v // / v.Length()
+    
+    let stepX = if vNormalized.X >= 0f then 1 else -1
+    let stepY = if vNormalized.Y >= 0f then 1 else -1
+    // todo: negative values in v
+    // let tx = MathF.Ceiling(u.X) - u.X
+    let tx = MathF.Ceiling(u.X + float32 stepX) - u.X
+    // todo: t = (u.X + stepX) / u.X
+    let tMaxX = MathF.Sqrt((tx ** 2f) + (((vNormalized.Y / vNormalized.X) * tx) ** 2f))
+    // let ty = MathF.Ceiling(u.Y) - u.Y
+    let ty = MathF.Floor(u.Y + float32 stepY) - u.Y
+    let tMaxY = MathF.Sqrt((ty ** 2f) + (((vNormalized.X / vNormalized.Y) * ty) ** 2f))
+    
+    // let tMaxX = float32 <| (int (MathF.Floor(u.X)) + stepX) * voxelWidth
+    // let tMaxY = float32 <| (int (MathF.Floor(u.Y)) + stepY) * voxelWidth
+    
+    let Frac f1 = f1 - MathF.Floor f1
+        // if f1 > 0f then
+        //     f1 - MathF.Floor(f1)
+        // else
+        //     f1 - MathF.Floor(f1)
+    let voxelWidth = float32 voxelWidth
+    {|
+        stepX = stepX
+        stepY = stepY
+        // todo: negative values in v
+        deltaX = voxelWidth / vNormalized.X * float32 stepX
+        deltaY = voxelWidth / vNormalized.Y * float32 stepY
+        tMaxX = tMaxX
+        tMaxY = tMaxY
+        // todo: Stackoverflow
+        // https://stackoverflow.com/questions/12367071/how-do-i-initialize-the-t-variables-in-a-fast-voxel-traversal-algorithm-for-ray
+        // deltaX = v.X - u.X
+        // deltaY = v.Y - u.Y
+        // tMaxX = (v.X - u.X) * (1f - Frac(u.X / 1f))
+        // tMaxY = (v.Y - u.Y) * (1f - Frac(u.Y / 1f))
+        
+        // tMaxX = (1f - (u.X - (MathF.Floor u.X))) / v.X
+        // tMaxY = (1f - (u.Y - (MathF.Floor u.Y))) / v.Y
+        // tMaxY = tMaxY
+    
+        
+    |}
+
+
+let traverseRay voxelWidth (origin: Vector2) (dir: Vector2) =
+    let info = initialize voxelWidth origin dir
+    let mutable tMaxX = info.tMaxX
+    let mutable tMaxY = info.tMaxY
+    JS.console.log ("tMaxX = ", tMaxX)
+    JS.console.log ("tMaxY = ", tMaxY)
+    let mutable x = int (MathF.Floor origin.X)
+    let mutable y = int (MathF.Floor origin.Y)
+    let yOffset = if info.stepY < 0 then -1 else 0
+    let xOffset = if info.stepX < 0 then -1 else 0
+    let mutable count = 0
+    seq {
+        JS.console.log (x + xOffset, y + yOffset)
+        yield (x + xOffset, y + yOffset)
+        while count < 10000 do
+            count <- count + 1
+            // if dir.X < 0f && dir.Y < 0f then
+            //     if tMaxY + info.deltaY > tMaxX + info.deltaX then
+            //     // if tMaxX < tMaxY then
+            //         JS.console.log $"    tMaxY <- {tMaxY} + {info.deltaY}"
+            //         tMaxY <- tMaxY + info.deltaY
+            //         y <- y + info.stepY
+            //     else
+            //         JS.console.log $"    tMaxX <- {tMaxX} + {info.deltaX}"
+            //         tMaxX <- tMaxX + info.deltaX
+            //         x <- x + info.stepX
+            // if dir.X < dir.Y then
+            //     if tMaxY + info.deltaY < tMaxX + info.deltaX then
+            //     // if tMaxX < tMaxY then
+            //         JS.console.log $"    tMaxY <- {tMaxY} + {info.deltaY}"
+            //         tMaxY <- tMaxY + info.deltaY
+            //         y <- y + info.stepY
+            //     else
+            //         JS.console.log $"    tMaxX <- {tMaxX} + {info.deltaX}"
+            //         tMaxX <- tMaxX + info.deltaX
+            //         x <- x + info.stepX
+            // else
+            // JS.console.log $"{tMaxX + info.deltaX} < {tMaxY + info.deltaY}"
+            // if tMaxX + info.deltaX < tMaxY + info.deltaY then
+            JS.console.log $"{tMaxX} < {tMaxY}"
+            if tMaxX < tMaxY then
+                JS.console.log $"    tMaxX <- {tMaxX} + {info.deltaX}"
+                tMaxX <- tMaxX + info.deltaX
+                x <- x + info.stepX
+            else
+                JS.console.log $"    tMaxY <- {tMaxY} + {info.deltaY}"
+                tMaxY <- tMaxY + info.deltaY
+                y <- y + info.stepY
+            JS.console.log (x + xOffset, y + yOffset)
+            yield (x + xOffset, y + yOffset)
+    }
+    // seq {
+    //     yield (x, y)
+    //     let mutable x = x
+    //     let mutable y = y
+    //     let mutable dx = x
+    //     let mutable dy = y
+    // }
