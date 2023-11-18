@@ -14,7 +14,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "GameServer", "..\FableGame\
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "App", "..\FableGame\src\App.fsproj", "{2B39A1D0-2539-4A3C-8FF9-2B79EEDFCCB6}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Server", "Server\Server.fsproj", "{AF26B6A3-C95D-4249-A867-6ABE96E12C05}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Signaling.Server", "Signaling.Server\Signaling.Server.fsproj", "{AF26B6A3-C95D-4249-A867-6ABE96E12C05}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
