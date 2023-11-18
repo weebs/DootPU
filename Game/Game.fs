@@ -72,28 +72,23 @@ type Game(world: world.World, width, height) =
             ) |> ignore
         for kv in scene.Entities do
             let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
+            let pos = snd kv.Value
             let sprite = three.Sprite.Create m
             let collider =
                 this.World.createCollider(
                     RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
                     this.World.createRigidBody(
                         RAPIER.RigidBodyDesc.newStatic()
-                            .setTranslation(kv.Value.x, kv.Value.y, kv.Value.z)))
-            sprite.position.x <- kv.Value.x
-            sprite.position.y <- kv.Value.y
-            sprite.position.z <- kv.Value.z
+                            .setTranslation(pos.x, pos.y, pos.z)))
+            sprite.position.x <- pos.x
+            sprite.position.y <- pos.y
+            sprite.position.z <- pos.z
             let instance = this.ThreeJsScene.add sprite
             // todo
             ()
             // spriteMap.current.Add(kv.Key, sprite)
             // colliderMap.current.Add(kv.Key, collider)
             // idMap.current.Add(collider, kv.Key)
-        for kv in scene.Walls do
-            let x, z = kv.Key
-            this.Scene.AddCube(true, { x = 1; y = 1; z = 1; }, { x = float x - 0.5; y = 0.5; z = float z - 0.5 })
-            |> ignore
-        for kv in scene.Entities do
-            ()
     
     
     member this.RenderPhysics () =
@@ -123,6 +118,9 @@ let inputVector () =
     velocityDirection.Normalized
 [<ReactComponent>]
 let GameView (game: Game) =
+    let audio: HTMLAudioElement = emitJsExpr null "new Audio()"
+    audio.src <- "shotgun.wav"
+    audio.volume <- 0.2
     let divRef = React.useRef<Types.HTMLDivElement option> None
     let timeRef = React.useRef 0.0
     let connectionRef = React.useRef<Types.RTCDataChannel option> None
@@ -149,7 +147,7 @@ let GameView (game: Game) =
             else
                 document.exitPointerLock ()
                 
-        if Engine.mouse1 then
+        if Engine.mouse1 && document.pointerLockElement <> null then
             let x = -1.0 * Math.Sin camera.rotation.y
             let z = -1.0 * Math.Cos camera.rotation.y
             let dir = RAPIER.Vector3.Create(x, 0, z)
@@ -176,6 +174,8 @@ let GameView (game: Game) =
                     // spriteMap.current.Remove id
                     // |> ignore
             | None -> ()
+            
+            audio.play()
                 
         if Keys.isPressed "q" then
             camera.rotation.y <- camera.rotation.y + (2.0 * dt)
@@ -190,10 +190,6 @@ let GameView (game: Game) =
         let input = inputVector ()
         let playerRotation = -camera.rotation.y
         let input = (Render.rotateVector playerRotation input).Normalized * dt * speed
-        // camera.position.x <- camera.position.x + input.X
-        // camera.position.z <- camera.position.z + input.Y
-        // ccCollider.current.setTranslation(RAPIER.Vector3.Create(camera.position.x, camera.position.y, camera.position.z))
-        
         // Character controller update
         let initialPos = ccCollider.current.translation()
         let destination = RAPIER.Vector3.Create(initialPos.x + input.X, 0, initialPos.z + input.Y)
@@ -225,22 +221,6 @@ let GameView (game: Game) =
                 initialPos.z + collision.Value.translationApplied.z + updatedInput.z))
             console.log (ccRef.current.computedCollision i)
             console.log updatedInput
-        // let initialPos = ccCollider.current.translation()
-        // let destination = RAPIER.Vector3.Create(initialPos.x + input.X, 0, initialPos.z + input.Y)
-        // let desiredInput = RAPIER.Vector3.Create(input.X, 0, input.Y)
-        // ccRef.current.computeColliderMovement(ccCollider.current, desiredInput)
-        // let correctedMovement = ccRef.current.computedMovement()
-        // let correctedDestination = RAPIER.Vector3.Create(initialPos.x + (correctedMovement.x * dt), 0, initialPos.z + (correctedMovement.z * dt))
-        // let correctedDestination = RAPIER.Vector3.Create(initialPos.x + correctedMovement.x, 0, initialPos.z + correctedMovement.z)
-        // ccCollider.current.setTranslation(correctedDestination)
-        // ccCollider.current.setTranslation(correctedMovement)
-        
-        // ccRef.current.computeColliderMovement(ccCollider.current, destination)
-        // let movement = ccRef.current.computedMovement()
-        // ccRigidbody.current.setLinvel(RAPIER.Vector3.Create(movement.x, 0, movement.z), true)
-        
-        // let pos = ccRigidbody.current.translation()
-        // let pos = correctedDestination
         let pos = ccCollider.current.translation()
         camera.position.x <- pos.x
         // camera.position.y <- pos.y
@@ -281,7 +261,14 @@ let GameView (game: Game) =
         // Setup connection to server and respond to messages
         promise {
             let! clientConnection, clientDataChannel, request = RTC.JS.createConnection ()
-            let websocket = WebSocket.Create("ws://127.0.0.1:8000/ws")
+            let endpoint =
+                document.baseURI
+                    .Replace("http:", "ws:")
+                    .Replace("https:", "wss:")
+                    .Replace("dedicated_server.html", "ws")
+                    .Replace("5173", "8000")
+            //let websocket = WebSocket.Create("ws://127.0.0.1:8000/ws")
+            let websocket = WebSocket.Create endpoint
             websocket.onmessage <- fun ev ->
                 match Decode.Auto.fromString<Network.LobbyConnection.ServerMessage> (string ev.data) with
                 | Ok message ->
@@ -340,8 +327,10 @@ let GameView (game: Game) =
                             |> ignore
                             peers.current <- peers.current.Remove id
                     | Network.WorldState world ->
-                        let treesTexture = three.TextureLoader.Create().load "textures/ForestTrees.png"
-                        let rsTreeTexture = three.TextureLoader.Create().load "textures/rs/yewtree.png"
+                        let loader = three.TextureLoader.Create()
+                        let treesTexture = loader.load "textures/ForestTrees.png"
+                        // let rsTreeTexture = loader.load "textures/rs/yewtree.png"
+                        let zombieStanding = loader.load "textures/rs/zombie_standing.png"
                         for wall in world.Walls do
                             let x, y = wall.Key
                             game.Scene.AddCube(
@@ -354,21 +343,24 @@ let GameView (game: Game) =
                                   z = float y + 0.5 },
                                 {| map = treesTexture |}
                             ) |> ignore
-                        for kv in world.Entities do
-                            let m = three.SpriteMaterial.Create(box {| map = rsTreeTexture |} :?> _)
-                            let sprite = three.Sprite.Create m
-                            let collider =
-                                game.World.createCollider(
-                                    RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
-                                    game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
-                                        kv.Value.x, kv.Value.y, kv.Value.z)))
-                            sprite.position.x <- kv.Value.x
-                            sprite.position.y <- kv.Value.y
-                            sprite.position.z <- kv.Value.z
-                            let instance = scene.add sprite
-                            spriteMap.current.Add(kv.Key, sprite)
-                            colliderMap.current.Add(kv.Key, collider)
-                            idMap.current.Add(collider, kv.Key)
+                        for (asset, entities) in world.Entities |> Map.toArray |> Array.groupBy (snd >> fst) do
+                            let texture = loader.load asset
+                            for id, (_, position) in entities do
+                                let kv = {| Key = id, asset; Value = position |}
+                                let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
+                                let sprite = three.Sprite.Create m
+                                let collider =
+                                    game.World.createCollider(
+                                        RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                                        game.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                                            kv.Value.x, kv.Value.y, kv.Value.z)))
+                                sprite.position.x <- kv.Value.x
+                                sprite.position.y <- kv.Value.y
+                                sprite.position.z <- kv.Value.z
+                                let instance = scene.add sprite
+                                spriteMap.current.Add(fst kv.Key, sprite)
+                                colliderMap.current.Add(fst kv.Key, collider)
+                                idMap.current.Add(collider, fst kv.Key)
                     | Network.EntityRemoved id ->
                         let collider = colliderMap.current[id]
                         let sprite = spriteMap.current[id]
@@ -407,14 +399,43 @@ let GameView (game: Game) =
             style.overflow.hidden
         ]
         prop.children [
-            Html.img [
-                prop.src "textures/double_barrel_shotgun.png"
-                prop.width (length.percent 20)
-                prop.height length.auto
+            Html.div [
                 prop.style [
                     style.position.absolute
-                    style.right (length.percent 25)
-                    style.bottom (length.percent -10)
+                    style.width (length.vw 100)
+                    style.height (length.vh 100)
+                ]
+                prop.children [
+                    Svg.svg [
+                        svg.width r.domElement.width
+                        svg.height r.domElement.height
+                        svg.children [
+                            Svg.rect [
+                                svg.x (r.domElement.width / 2.0 - 25.0)
+                                svg.y (r.domElement.height / 2.0 - 1.0)
+                                svg.width 50
+                                svg.height 2
+                                svg.stroke "blue"
+                            ]
+                            Svg.rect [
+                                svg.x (r.domElement.width / 2.0 - 1.0)
+                                svg.y (r.domElement.height / 2.0 - 25.0)
+                                svg.width 2
+                                svg.height 50
+                                svg.stroke "blue"
+                            ]
+                        ]
+                    ]
+                    Html.img [
+                        prop.src "textures/double_barrel_shotgun.png"
+                        prop.width (length.percent 20)
+                        prop.height length.auto
+                        prop.style [
+                            style.position.absolute
+                            style.right (length.percent 25)
+                            style.bottom (length.percent -10)
+                        ]
+                    ]
                 ]
             ]
         ]
@@ -450,7 +471,7 @@ let start () = promise {
     // let rscStoneWall = three.TextureLoader.Create().load "textures/rs/wall.png"
     // rscStoneWall.center <- three.Vector2.Create(0.5, 0.5)
     // rscStoneWall.rotation <- Math.Tau / 4.0
-    r.setSize (screenWidth, screenHeight)
+    r.setSize (screenWidth, screenHeight + 1.0)
     window.onresize <- fun _ ->
         console.log "resize"
         r.setSize(window.innerWidth, window.innerHeight)

@@ -32,7 +32,7 @@ type ClientMessage =
     
 type Scene = {
     Walls: Map<int * int, byte * byte * byte>
-    Entities: Map<int, float3>
+    Entities: Map<int, string * float3>
 }
 
 type ServerMessage =
@@ -93,12 +93,16 @@ module Scene =
         //     let d = Dictionary()
         //     mapData |> Map.iter (fun key value -> d[key] <- toRgb value)
         //     d
+        let tree = "textures/rs/yewtree.png"
+        let zombie = "textures/rs/zombie_standing.png"
         let area = float mapSize * 10.0 * 2.0
         {
             Entities = Map.ofArray [|
                 for i in 1..2000 do
-                    i, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); }
-                    i, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); }
+                    i, (tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                    i, (tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                for i in 2001..2201 do
+                    i, (zombie, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
             |]
             Walls = mapData |> Map.map (fun _ value -> 0uy, 0uy, 0uy)
         }

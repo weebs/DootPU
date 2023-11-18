@@ -25,9 +25,7 @@
         <PackageReference Include="Feliz.UseElmish" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\..\FableGame\bindings\three.fs">
-          <Link>three.fs</Link>
-        </Compile>
+        <Compile Include="three.fs" />
         <Compile Include="JsImports.fs" />
         <Compile Include="Network.fs" />
         <Compile Include="RTC.JS.fs" />
@@ -52,9 +50,11 @@
         <Compile Include="Game.fs" />
         <Compile Include="Game.Server.fs" />
         <Content Include="*.html" />
+        <Folder Include="textures/*" />
     </ItemGroup>
     <ItemGroup>
       <TypeScriptCompile Include="vite.config.ts" />
+      <Content Include="server.js" />
     </ItemGroup>
 
 </Project>
