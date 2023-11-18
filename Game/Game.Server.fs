@@ -1,6 +1,5 @@
 ﻿module Dootverse.Game.Server
 open System
-open Browser.Types
 open Fable.Core
 open Fable.Core.JsInterop
 open Browser
@@ -8,6 +7,8 @@ open Dootverse.Client.JsImports
 open Dootverse.Client.Game
 open Dootverse
 open Thoth.Json
+
+// let WebSocket: Browser.Types.WebSocketType = JsInterop.importMember "ws"
 
 type ServerCmd =
     | AddEnemy
@@ -72,18 +73,6 @@ type GameServer(world: world.World, scene: Network.Scene) =
             console.log ev
         channel.onopen <- fun ev ->
             clientConnection <- clientConnection.Add (id, channel)
-            if channel.readyState = RTCDataChannelState.Open then
-                console.log ("open!", id)
-            else
-                console.log (channel.readyState, id)
-            console.log channel
-            console.log ev
-            // ev.channel.onmessage <- fun ev ->
-            //     console.log "server data channel message"
-            //     console.log ev
-            // ev.channel.onmessage <- fun ev -> onMessage id (Decode.Auto.unsafeFromString (string ev.data))
-            // console.log ("server data channel open", ev.channel)
-            // clientConnection <- clientConnection.Add (id, ev.channel)
             // JS.debugger ()
             if ev.currentTarget?readyState = "open" then
                 sendMsg id (Network.WorldState scene)
@@ -98,13 +87,14 @@ type GameServer(world: world.World, scene: Network.Scene) =
         []
 
 let start () = promise {
+    console.log "init"
     do! RAPIER.init ()
     let endpoint =
         document.baseURI
             .Replace("http:", "ws:")
             .Replace("https:", "wss:")
             .Replace("dedicated_server.html", "ws")
-    JS.debugger ()
+            // .Replace("5173", "8000")
     let c = WebSocket.Create endpoint
     c.onopen <- fun ev ->
         let server = GameServer(
