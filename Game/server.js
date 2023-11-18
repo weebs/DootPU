@@ -1,0 +1,10 @@
+﻿const { chromium, devices } = await import('playwright')
+const browser = await chromium.launch({ headless: true })
+const page = await browser.newPage()
+page.on('console', msg => {
+    console.log(msg)
+})
+const game = await chromium.launch({ headless: false })
+const gamePage = await game.newPage()
+await page.goto('http://localhost:5173/dedicated_server.html')
+await gamePage.goto('http://localhost:5173/game.html')
