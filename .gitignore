@@ -8,3 +8,5 @@ riderModule.iml
 *.min.js
 node_modules/
 *.fs.ts
+**/fable_modules/
+**.sync-conflict**
