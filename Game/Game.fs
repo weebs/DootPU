@@ -5,6 +5,7 @@ open System.Collections.Generic
 open Browser.Types
 open Doot.Maths.Voxel.Traversal
 open Dootverse
+open Dootverse.Network
 open Dootverse.Models
 open Fable.Core
 open Browser
@@ -295,7 +296,7 @@ let GameView (game: Game) =
             match game.Fire() with
             | Some (id, ent) ->
                 console.log "ope"
-                send (Network.ShotEntity id)
+                send (ClientMessage.ShotEntity id)
             | None -> ()
             // spriteMap.current.Remove id
             // |> ignore
@@ -355,7 +356,7 @@ let GameView (game: Game) =
             if connectionRef.current.IsSome then
                 connectionRef.current.Value.send !^ (
                     Encode.Auto.toString<Network.ClientMessage> (
-                         Network.Update {
+                         ClientMessage.Update {
                               Position = { x = camera.position.x; y = camera.position.y; z = camera.position.z; }
                               Rotation = camera.rotation.y
                         }
@@ -391,10 +392,10 @@ let GameView (game: Game) =
                     .Replace("game.html", "ws")
                     .Replace("5173", "8000")
             let onMsg msg =
-                match Decode.Auto.fromString<Network.ServerMessage> msg with
+                match Decode.Auto.fromString<ServerMessage> msg with
                 | Ok message ->
                     match message with
-                    | Network.UpdatePlayer (id, state) ->
+                    | ServerMessage.UpdatePlayer (id, state) ->
                         let sprite =
                             if not (peers.current.ContainsKey id) then
                                 let loader = three.TextureLoader.Create()
@@ -411,17 +412,34 @@ let GameView (game: Game) =
                         sprite.position.y <- state.Position.y
                         sprite.position.z <- state.Position.z
                         sprite.rotation.y <- state.Rotation
-                    | Network.PlayerDisconnected id ->
-                        if peers.current.ContainsKey id then
-                            scene.remove peers.current[id]
-                            |> ignore
-                            peers.current <- peers.current.Remove id
-                    | Network.WorldState world ->
+                    // | ServerMessage.PlayerDisconnected id ->
+                    //     if peers.current.ContainsKey id then
+                    //         scene.remove peers.current[id]
+                    //         |> ignore
+                    //         peers.current <- peers.current.Remove id
+                    | ServerMessage.WorldState world ->
                         game.Load_Scene world
-                    | Network.EntityRemoved id ->
+                    | ServerMessage.EntityRemoved id ->
                         game.Delete id
-                    | Network.EntityMoved (id, pos) ->
+                    | ServerMessage.EntityMoved (id, pos) ->
                         game.MoveEntity (id, pos)
+                    | ServerMessage.GameEvent event ->
+                        match event with
+                        | GameEvent.EntityDestroyed id -> game.Delete id
+                        | GameEvent.EnemyDamaged id -> console.log event
+                        | GameEvent.PlayerJoined(id, name) ->
+                            let loader = three.TextureLoader.Create()
+                            let texture = loader.load "textures/doom/guy.png"
+                            let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
+                            let sprite = three.Sprite.Create m
+                            sprite.scale.set(0.5, 0.5, 0.5) |> ignore
+                            scene.add sprite |> ignore
+                            peers.current <- peers.current.Add (id, sprite)
+                        | GameEvent.PlayerDisconnected id ->
+                            if peers.current.ContainsKey id then
+                                scene.remove peers.current[id]
+                                |> ignore
+                                peers.current <- peers.current.Remove id
                     | _else ->
                         console.log _else
                 | Error err ->

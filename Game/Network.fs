@@ -37,8 +37,13 @@ type PlayerState =
         Position: float3
         Rotation: float
     }
-    
-type ClientMessage =
+/// Events broadcasted by the server    
+type GameEvent =
+    | EntityDestroyed of int
+    | EnemyDamaged of int
+    | PlayerJoined of int * string
+    | PlayerDisconnected of int
+type [<RequireQualifiedAccess>] ClientMessage =
     | Update of PlayerState
     | DestroyedEntity of id: int
     | ShotEntity of id: int
@@ -61,12 +66,13 @@ type Scene = {
     GameObjects: Map<int, GameEntity>
 }
 
-type ServerMessage =
-    | UpdatePlayer of Guid * PlayerState
-    | PlayerDisconnected of Guid
+type [<RequireQualifiedAccess>] ServerMessage =
+    | UpdatePlayer of int * PlayerState
+    // | PlayerDisconnected of Guid
     | WorldState of Scene
     | EntityRemoved of int
     | EntityMoved of int * float3
+    | GameEvent of GameEvent
     
     
 module Scene =

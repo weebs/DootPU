@@ -6,16 +6,11 @@ open Browser
 open Dootverse.Client.JsImports
 open Dootverse.Client.Game
 open Dootverse
+open Dootverse.Network
 open Thoth.Json
 
 // let WebSocket: Browser.Types.WebSocketType = JsInterop.importMember "ws"
 
-
-type Event =
-    | EntityDestroyed of int
-    | EnemyDamaged of int
-    | PlayerJoined of int * string
-    | PlayerDisconnected of int
 type Scene(world: world.World) =
     let scene = Network.Scene.createScene ()
     do ()
@@ -26,7 +21,12 @@ type Scene(world: world.World) =
         //         ()
 type GameServer(world: world.World, scene: Network.Scene) =
     let mutable scene = scene
-    let mutable clientConnection: Map<Guid, Browser.Types.RTCDataChannel> = Map.empty
+    let nextClientId =
+        let mutable id = 0
+        fun () ->
+            id <- id + 1
+            id - 1
+    let mutable clientConnection: Map<int, Browser.Types.RTCDataChannel> = Map.empty
     let sendMsg id (msg: Network.ServerMessage) =
         try
             let c = clientConnection[id]
@@ -50,16 +50,16 @@ type GameServer(world: world.World, scene: Network.Scene) =
             let clientIds = clientConnection.Keys
             for clientId in clientIds do
                 sendMsg clientId msg
-    let onClientMessage (clientGuid: Guid) (message: Network.ClientMessage) = [|
+    let onClientMessage (clientGuid: int) (message: Network.ClientMessage) = [|
         match message with
-        | Network.Update state ->
+        | ClientMessage.Update state ->
             let clients = clientConnection.Keys
             for clientId in clients do
                 if clientId <> clientGuid then
-                    sendMsg clientId (Network.UpdatePlayer (clientGuid, state))
-        | Network.DestroyedEntity id ->
+                    sendMsg clientId (ServerMessage.UpdatePlayer (clientGuid, state))
+        | ClientMessage.DestroyedEntity id ->
             EntityDestroyed id
-        | Network.ShotEntity id ->
+        | ClientMessage.ShotEntity id ->
             console.log ("shot entity", id)
             match scene.GameObjects.TryFind id with
             | Some entity ->
@@ -78,7 +78,7 @@ type GameServer(world: world.World, scene: Network.Scene) =
     /// Create answer to WebRTC request, initialize connection, and add player connection to list of lobby connections
     member this.ConnectClient request = promise {
         let! c, channel, response = RTC.JS.answerRequest request
-        let id = Guid.NewGuid()
+        let id = nextClientId ()
         // clientConnection <- clientConnection.Add (id, channel)
         channel.onmessage <- fun ev ->
             try
@@ -94,14 +94,14 @@ type GameServer(world: world.World, scene: Network.Scene) =
                             let state = { zombie with health = zombie.health - 50.0 }
                             if state.health <= 0 then
                                 scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
-                                broadcastMsg None (Network.EntityRemoved id) |> ignore
+                                broadcastMsg None (ServerMessage.EntityRemoved id) |> ignore
                             else
                                 let state = { entity with data = Network.Enemy (sprite, Network.Zombie state) }
                                 scene <- { scene with GameObjects = scene.GameObjects.Add (id, state) }
                     | EntityDestroyed id ->
                         console.log ("destroy entity id", id)
                         scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
-                        broadcastMsg None (Network.EntityRemoved id) |> ignore
+                        broadcastMsg None (ServerMessage.EntityRemoved id) |> ignore
                     | _else -> console.log _else
                 ()
             with error ->
@@ -112,13 +112,13 @@ type GameServer(world: world.World, scene: Network.Scene) =
         c.onconnectionstatechange <- fun ev ->
             if ev.target?connectionState = "disconnected" then
                 clientConnection <- clientConnection.Remove id
-                broadcastMsg (Some id) (Network.PlayerDisconnected id)
+                broadcastMsg (Some id) (ServerMessage.GameEvent (GameEvent.PlayerDisconnected id))
             console.log ev
         channel.onopen <- fun ev ->
             clientConnection <- clientConnection.Add (id, channel)
             // JS.debugger ()
             if ev.currentTarget?readyState = "open" then
-                sendMsg id (Network.WorldState scene)
+                sendMsg id (ServerMessage.WorldState scene)
         return response
     }
     member this.AddEnemy() =
