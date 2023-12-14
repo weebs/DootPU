@@ -149,49 +149,52 @@ type Game(world: world.World, width, height) =
                 {| map = treesTexture |}
             )
             ()
-        for (entity, objects) in world.GameObjects |> Map.toArray |> Array.groupBy (snd >> fst) do
+        // for (entity, objects) in world.GameObjects |> Map.toArray |> Array.groupBy (snd >> fst) do
+        for kv in world.GameObjects do
+            let id = kv.Key
+            let entity = kv.Value
+            // todo: optimize loading assets
             let texture =
-                match entity with
+                match entity.data with
                 | Network.Tree ->
                     loader.load rsTreeTexture
                 | Network.Enemy (spriteName, enemyType) ->
                     loader.load spriteName
                 | Network.Player playerName ->
                     loader.load "textures/doom/guy.png"
-            for id, (_, position) in objects do
-                let kv = {| Key = id, entity; Value = position |}
-                let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
-                let sprite = three.Sprite.Create m
-                let collider =
-                    this.World.createCollider(
-                        RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
-                        this.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
-                            kv.Value.x, kv.Value.y, kv.Value.z)))
-                sprite.position.x <- kv.Value.x
-                sprite.position.y <- kv.Value.y
-                sprite.position.z <- kv.Value.z
-                match entity with
-                | Network.Enemy _ ->
-                    sprite.scale.y <- 1
-                    sprite.scale.x <- 1
-                    sprite.scale.z <- 1
-                    sprite.position.y <- 0.25
-                    let healthbarTexture = loader.load "textures/healthbar.png"
-                    let healthbar = three.Sprite.Create(three.SpriteMaterial.Create(box {| map = healthbarTexture |} :?> _))
-                    healthbar.scale.x <- 1.0
-                    healthbar.scale.y <- 34.0 / 200.0
-                    healthbar.position.y <- 0.5
-                    // healthbar.position.x <- kv.Value.x
-                    // healthbar.position.y <- kv.Value.y
-                    // healthbar.position.z <- kv.Value.z
-                    // scene.add healthbar
-                    sprite.add healthbar
-                    |> ignore
-                    console.log healthbar
-                | _ -> ()
-                let instance = this.ThreeJsScene.add sprite
-                entities.Add(fst kv.Key, { id = fst kv.Key; sprite = sprite; collider = collider; typ = entity})
-                colliderMap.Add(collider, fst kv.Key)
+            let kv = {| Key = id, entity; Value = entity.position |}
+            let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
+            let sprite = three.Sprite.Create m
+            let collider =
+                this.World.createCollider(
+                    RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                    this.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                        kv.Value.x, kv.Value.y, kv.Value.z)))
+            sprite.position.x <- kv.Value.x
+            sprite.position.y <- kv.Value.y
+            sprite.position.z <- kv.Value.z
+            match entity.data with
+            | Network.Enemy _ ->
+                sprite.scale.y <- 1
+                sprite.scale.x <- 1
+                sprite.scale.z <- 1
+                sprite.position.y <- 0.25
+                let healthbarTexture = loader.load "textures/healthbar.png"
+                let healthbar = three.Sprite.Create(three.SpriteMaterial.Create(box {| map = healthbarTexture |} :?> _))
+                healthbar.scale.x <- 1.0
+                healthbar.scale.y <- 34.0 / 200.0
+                healthbar.position.y <- 0.5
+                // healthbar.position.x <- kv.Value.x
+                // healthbar.position.y <- kv.Value.y
+                // healthbar.position.z <- kv.Value.z
+                // scene.add healthbar
+                sprite.add healthbar
+                |> ignore
+                console.log healthbar
+            | _ -> ()
+            let instance = this.ThreeJsScene.add sprite
+            entities.Add(fst kv.Key, { id = fst kv.Key; sprite = sprite; collider = collider; typ = entity.data })
+            colliderMap.Add(collider, fst kv.Key)
     
     
     member this.RenderPhysics () =
@@ -270,6 +273,12 @@ let GameView (game: Game) =
     let camera = game.Camera
     let scene = game.ThreeJsScene
     let r = game.Renderer
+    let inline send msg =
+        connectionRef.current |> Option.iter (fun c ->
+            let msg = Encode.Auto.toString msg
+            c.send !^ msg
+        )
+        
     // game.DebugPhysics <- false
     let rec update (dt: float) =
         // for sprite in sprites do
@@ -285,15 +294,8 @@ let GameView (game: Game) =
         if Engine.mouse1 && document.pointerLockElement <> null then
             match game.Fire() with
             | Some (id, ent) ->
-                match ent.typ with
-                | Network.EntityType.Enemy _ ->
-                    connectionRef.current |> Option.iter (fun c ->
-                        let msg = Encode.Auto.toString (Network.DestroyedEntity id)
-                        console.log msg
-                        console.log c
-                        c.send !^ msg)
-                | _else ->
-                    JS.console.log ("hit non enemy entity: ", _else)
+                console.log "ope"
+                send (Network.ShotEntity id)
             | None -> ()
             // spriteMap.current.Remove id
             // |> ignore

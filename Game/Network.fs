@@ -13,6 +13,18 @@ type WebRtcResponse =
         Answer: string
         Candidates: (string * string option)[]
     }
+// todo rename to Signaling
+module Signaling =
+    type [<Struct; Erase>] LobbyId = LobbyId of System.Guid
+    type ClientMessage =
+        | Connect of Guid * WebRtcRequest
+        | ConnectionResponse of Guid * WebRtcResponse
+        | HostLobby of name: string
+        | RefreshLobbies
+    type ServerMessage =
+        | ConnectionResponse of WebRtcResponse
+        | ConnectionRequest of Guid * WebRtcRequest
+        | Lobbies of {| id: Guid; name: string; playerCount: int |}[]
     
 type float3 =
     { x: float; y: float; z: float }
@@ -29,17 +41,24 @@ type PlayerState =
 type ClientMessage =
     | Update of PlayerState
     | DestroyedEntity of id: int
-type ZombieState =
-    | Idle
+    | ShotEntity of id: int
 type EnemyType =
-    | Zombie of ZombieState
+    | Zombie of Zombie
+and Zombie = { health: float; state: ZombieState }
+and ZombieState =
+    | Idle
 type EntityType =
     | Tree
     | Enemy of sprite: string * ``type``: EnemyType
     | Player of name: string
+type GameEntity = {
+    position: float3
+    data: EntityType
+    sprite: string option
+}
 type Scene = {
     Walls: Map<int * int, byte * byte * byte>
-    GameObjects: Map<int, EntityType * float3>
+    GameObjects: Map<int, GameEntity>
 }
 
 type ServerMessage =
@@ -49,18 +68,6 @@ type ServerMessage =
     | EntityRemoved of int
     | EntityMoved of int * float3
     
-// todo rename to Signaling
-module Signaling =
-    type [<Struct; Erase>] LobbyId = LobbyId of System.Guid
-    type ClientMessage =
-        | Connect of Guid * WebRtcRequest
-        | ConnectionResponse of Guid * WebRtcResponse
-        | HostLobby of name: string
-        | RefreshLobbies
-    type ServerMessage =
-        | ConnectionResponse of WebRtcResponse
-        | ConnectionRequest of Guid * WebRtcRequest
-        | Lobbies of {| id: Guid; name: string; playerCount: int |}[]
     
 module Scene =
     let mapSize = 10
@@ -108,10 +115,10 @@ module Scene =
         {
             GameObjects = Map.ofArray [|
                 for i in 1..2000 do
-                    i, (Tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
-                    i, (Tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                    i, { data = Tree; sprite = Some tree; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
+                    i, { data = Tree; sprite = Some tree; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
                 for i in 2001..2201 do
-                    i, (Enemy (zombie, Zombie ZombieState.Idle) , { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                    i, { data = Enemy (zombie, Zombie { health = 100.0; state = ZombieState.Idle }); sprite = Some zombie; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
             |]
             Walls = mapData |> Map.map (fun _ value -> 0uy, 0uy, 0uy)
         }

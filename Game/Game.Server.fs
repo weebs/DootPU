@@ -10,18 +10,20 @@ open Thoth.Json
 
 // let WebSocket: Browser.Types.WebSocketType = JsInterop.importMember "ws"
 
-type ServerCmd =
-    | AddEnemy
-    | AddPlayer
-    | DamageEnemy
+
+type Event =
+    | EntityDestroyed of int
+    | EnemyDamaged of int
+    | PlayerJoined of int * string
+    | PlayerDisconnected of int
 type Scene(world: world.World) =
     let scene = Network.Scene.createScene ()
-    do
-        for wall in scene.Walls do
-            ()
-        for (entity, objects) in scene.GameObjects |> Map.toArray |> Array.groupBy (snd >> fst) do
-            for id, (t, pos) in objects do
-                ()
+    do ()
+        // for wall in scene.Walls do
+        //     ()
+        // for (entity, objects) in scene.GameObjects |> Map.toArray |> Array.groupBy (snd >> fst) do
+        //     for id, (t, pos) in objects do
+        //         ()
 type GameServer(world: world.World, scene: Network.Scene) =
     let mutable scene = scene
     let mutable clientConnection: Map<Guid, Browser.Types.RTCDataChannel> = Map.empty
@@ -48,7 +50,7 @@ type GameServer(world: world.World, scene: Network.Scene) =
             let clientIds = clientConnection.Keys
             for clientId in clientIds do
                 sendMsg clientId msg
-    let onClientMessage (clientGuid: Guid) (message: Network.ClientMessage) =
+    let onClientMessage (clientGuid: Guid) (message: Network.ClientMessage) = [|
         match message with
         | Network.Update state ->
             let clients = clientConnection.Keys
@@ -56,9 +58,20 @@ type GameServer(world: world.World, scene: Network.Scene) =
                 if clientId <> clientGuid then
                     sendMsg clientId (Network.UpdatePlayer (clientGuid, state))
         | Network.DestroyedEntity id ->
-            console.log ("destroy entity id", id)
-            scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
-            broadcastMsg None (Network.EntityRemoved id) |> ignore
+            EntityDestroyed id
+        | Network.ShotEntity id ->
+            console.log ("shot entity", id)
+            match scene.GameObjects.TryFind id with
+            | Some entity ->
+                match entity.data with
+                | Network.Enemy (sprite, enemy) ->
+                    EnemyDamaged id
+                | _else ->
+                    console.log _else
+            | None ->
+                ()
+        // todo: Instead of mutating the scene, yield a list of events
+        |]
     // let entities = Map<int, Component list>
     member this.AddClient id client =
         clientConnection <- clientConnection.Add (id, client)
@@ -69,7 +82,28 @@ type GameServer(world: world.World, scene: Network.Scene) =
         // clientConnection <- clientConnection.Add (id, channel)
         channel.onmessage <- fun ev ->
             try
-                onClientMessage id (Decode.Auto.unsafeFromString (string ev.data))
+                let events = onClientMessage id (Decode.Auto.unsafeFromString (string ev.data))
+                for event in events do
+                    match event with
+                    | EnemyDamaged id ->
+                        // let ((Network.Enemy (sprite, enemy)), pos) =
+                        let entity = scene.GameObjects[id]
+                        let (Network.Enemy (sprite, enemy)) = entity.data
+                        match enemy with
+                        | Network.Zombie zombie ->
+                            let state = { zombie with health = zombie.health - 50.0 }
+                            if state.health <= 0 then
+                                scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
+                                broadcastMsg None (Network.EntityRemoved id) |> ignore
+                            else
+                                let state = { entity with data = Network.Enemy (sprite, Network.Zombie state) }
+                                scene <- { scene with GameObjects = scene.GameObjects.Add (id, state) }
+                    | EntityDestroyed id ->
+                        console.log ("destroy entity id", id)
+                        scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
+                        broadcastMsg None (Network.EntityRemoved id) |> ignore
+                    | _else -> console.log _else
+                ()
             with error ->
                 console.log error
         // c.ondatachannel <- fun ev ->
@@ -94,16 +128,16 @@ type GameServer(world: world.World, scene: Network.Scene) =
         ()
     member this.Step() =
         for kv in scene.GameObjects do
-            match fst kv.Value with
+            match kv.Value.data with
             | Network.EntityType.Enemy _ ->
-                let pos = snd kv.Value
+                let pos = kv.Value.position
                 let r = JS.Math.random()
                 if r > 0.1 then
                     // JS.console.log ("ope = " + (string r))
                     // JS.console.log (sprintf "%A" (fst kv.Value), snd kv.Value)
                     let p' = { pos with x = pos.x + 0.01 }
                     broadcastMsg None (Network.ServerMessage.EntityMoved (kv.Key, p'))
-                    scene <- { scene with GameObjects = scene.GameObjects.Add(kv.Key, (fst kv.Value, p')) }
+                    scene <- { scene with GameObjects = scene.GameObjects.Add(kv.Key, { kv.Value with position = p' }) }
             | _ ->
                 ()
         []
