@@ -15,7 +15,7 @@ type Server() =
             let! _ = (server.SendAsync (id, msg) |> Async.AwaitTask)
             ()
     }
-    let sendMsg id (msg: Network.LobbyConnection.ServerMessage) =
+    let sendMsg id (msg: Network.Signaling.ServerMessage) =
         agent.Post (id, Encode.Auto.toString msg)
         // task {
         //     let! _ = server.SendAsync (id, Encode.Auto.toString msg)
@@ -39,7 +39,7 @@ type Server() =
     let onClientConnected (event: ConnectionEventArgs) =
         printfn $"{event.Client.Guid} connected"
         clients <- clients.Add (event.Client.Guid, event.Client)
-        sendMsg event.Client.Guid (Network.LobbyConnection.Lobbies (getLobbies ()))
+        sendMsg event.Client.Guid (Network.Signaling.Lobbies (getLobbies ()))
         |> ignore
         
     let onClientDisconnected (event: DisconnectionEventArgs) =
@@ -52,19 +52,19 @@ type Server() =
         //     |> ignore
 
     let onMessage (event: MessageReceivedEventArgs) =
-        match Decode.Auto.fromString<Network.LobbyConnection.ClientMessage> (Encoding.UTF8.GetString(event.Data)) with
+        match Decode.Auto.fromString<Network.Signaling.ClientMessage> (Encoding.UTF8.GetString(event.Data)) with
         | Ok message ->
             match message with
-            | Network.LobbyConnection.Connect(lobbyId, webRtcRequest) ->
-                sendMsg lobbyId (Network.LobbyConnection.ConnectionRequest (event.Client.Guid, webRtcRequest))
+            | Network.Signaling.Connect(lobbyId, webRtcRequest) ->
+                sendMsg lobbyId (Network.Signaling.ConnectionRequest (event.Client.Guid, webRtcRequest))
                 |> ignore
-            | Network.LobbyConnection.HostLobby name ->
+            | Network.Signaling.HostLobby name ->
                 lobbies <- lobbies.Add(event.Client.Guid, (name, 0))
-            | Network.LobbyConnection.RefreshLobbies ->
-                sendMsg event.Client.Guid (Network.LobbyConnection.Lobbies (getLobbies ()))
+            | Network.Signaling.RefreshLobbies ->
+                sendMsg event.Client.Guid (Network.Signaling.Lobbies (getLobbies ()))
                 |> ignore
-            | Network.LobbyConnection.ConnectionResponse (clientId, webRtcRequest) ->
-                sendMsg clientId (Network.LobbyConnection.ServerMessage.ConnectionResponse webRtcRequest)
+            | Network.Signaling.ConnectionResponse (clientId, webRtcRequest) ->
+                sendMsg clientId (Network.Signaling.ServerMessage.ConnectionResponse webRtcRequest)
                 |> ignore
         | Error err ->
             printfn "%A" err

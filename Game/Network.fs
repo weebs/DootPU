@@ -29,10 +29,17 @@ type PlayerState =
 type ClientMessage =
     | Update of PlayerState
     | DestroyedEntity of id: int
-    
+type ZombieState =
+    | Idle
+type EnemyType =
+    | Zombie of ZombieState
+type EntityType =
+    | Tree
+    | Enemy of sprite: string * ``type``: EnemyType
+    | Player of name: string
 type Scene = {
     Walls: Map<int * int, byte * byte * byte>
-    Entities: Map<int, string * float3>
+    GameObjects: Map<int, EntityType * float3>
 }
 
 type ServerMessage =
@@ -40,8 +47,10 @@ type ServerMessage =
     | PlayerDisconnected of Guid
     | WorldState of Scene
     | EntityRemoved of int
+    | EntityMoved of int * float3
     
-module LobbyConnection =
+// todo rename to Signaling
+module Signaling =
     type [<Struct; Erase>] LobbyId = LobbyId of System.Guid
     type ClientMessage =
         | Connect of Guid * WebRtcRequest
@@ -97,12 +106,12 @@ module Scene =
         let zombie = "textures/rs/zombie_standing.png"
         let area = float mapSize * 10.0 * 2.0
         {
-            Entities = Map.ofArray [|
+            GameObjects = Map.ofArray [|
                 for i in 1..2000 do
-                    i, (tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
-                    i, (tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                    i, (Tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                    i, (Tree, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
                 for i in 2001..2201 do
-                    i, (zombie, { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
+                    i, (Enemy (zombie, Zombie ZombieState.Idle) , { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); })
             |]
             Walls = mapData |> Map.map (fun _ value -> 0uy, 0uy, 0uy)
         }
