@@ -265,7 +265,7 @@ let GameView (game: Game) =
                 document.baseURI
                     .Replace("http:", "ws:")
                     .Replace("https:", "wss:")
-                    .Replace("dedicated_server.html", "ws")
+                    .Replace("game.html", "ws")
                     .Replace("5173", "8000")
             //let websocket = WebSocket.Create("ws://127.0.0.1:8000/ws")
             let websocket = WebSocket.Create endpoint
