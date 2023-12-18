@@ -31,6 +31,10 @@ type float3 =
     member inline this.Tuple = (this.x, this.y, this.z)
     static member (/) (a: float3, b: float) =
         { x = a.x / b; y = a.y / b; z = a.z / b }
+    static member (+) (a: float3, b: float3) =
+        { x = a.x + b.x; y = a.y + b.y; z = a.z + b.z }
+    static member (-) (a: float3, b: float3) =
+        { x = a.x - b.x; y = a.y - b.y; z = a.z - b.z }
     static member inline From<^a when ^a: (member x: float) and ^a: (member y: float) and ^a: (member z: float)> (value: ^a) =
         { x = value.x; y = value.y; z = value.z; }
 
@@ -40,13 +44,6 @@ type PlayerState =
         Rotation: float
     }
 /// Events broadcasted by the server    
-type GameEvent =
-    | EntityDestroyed of int
-    | EnemyDamaged of int
-    | PlayerJoined of int * string
-    | PlayerDisconnected of int
-    | EntityMoved of int * float3
-    | PlayerUpdated of int * PlayerState
 type [<RequireQualifiedAccess>] ClientMessage =
     | Update of PlayerState
     | DestroyedEntity of id: int
@@ -56,6 +53,7 @@ type EnemyType =
 and Zombie = { health: float; state: ZombieState }
 and ZombieState =
     | Idle
+    | ChasingPlayer of id: int
 type EntityType =
     | Tree
     | Enemy of sprite: string * ``type``: EnemyType
@@ -69,6 +67,14 @@ type Scene = {
     Walls: Map<int * int, byte * byte * byte>
     GameObjects: Map<int, GameEntity>
 }
+type GameEvent =
+    | EntityDestroyed of int
+    | EnemyDamaged of int
+    | PlayerJoined of int * string
+    | PlayerDisconnected of int
+    | EntityMoved of int * float3
+    | PlayerUpdated of int * PlayerState
+    | EntityUpdated of int * GameEntity
 
 type [<RequireQualifiedAccess>] ServerMessage =
     | UpdatePlayer of int * PlayerState

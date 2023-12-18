@@ -1,5 +1,6 @@
 ﻿module Dootverse.Game.Server
 open System
+open System.Collections.Generic
 open Dootverse.Network.Signaling
 open Fable.Core
 open Fable.Core.JsInterop
@@ -21,6 +22,7 @@ type GameServer(world: world.World, scene: Scene) =
         fun () ->
             id <- id + 1
             id - 1
+            game.Scene.GameObjects.Keys |> Seq.max |> (+) 1
     let mutable clientConnection: Map<int, Browser.Types.RTCDataChannel> = Map.empty
     /// Return an array of events that occur due to the message
     let onClientMessage (clientGuid: int) (message: ClientMessage) = [|
@@ -82,56 +84,56 @@ type GameServer(world: world.World, scene: Scene) =
     /// Create answer to WebRTC request, initialize connection, and add player connection to list of lobby connections
     member this.ConnectClient request = promise {
         let! c, channel, response = RTC.JS.answerRequest request
-        let id = nextClientId ()
         // clientConnection <- clientConnection.Add (id, channel)
-        channel.onmessage <- fun ev ->
-            try
-                let events = onClientMessage id (Decode.Auto.unsafeFromString (string ev.data))
-                for event in events do
-                    broadcastMsg None (ServerMessage.GameEvent event)
-                    game.ApplyEvent event
-                    // match event with
-                    // | EnemyDamaged id ->
-                    //     // let ((Enemy (sprite, enemy)), pos) =
-                    //     let entity = scene.GameObjects[id]
-                    //     match scene.GameObjects.TryFind id |> Option.map (fun o -> o.data) with
-                    //     | Some (Enemy (sprite, enemy)) ->
-                    //         match enemy with
-                    //         | Zombie zombie ->
-                    //             let state = { zombie with health = zombie.health - 50.0 }
-                    //             if state.health <= 0 then
-                    //                 scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
-                    //                 broadcastMsg None (ServerMessage.EntityRemoved id)
-                    //             else
-                    //                 let state = { entity with data = Enemy (sprite, Zombie state) }
-                    //                 scene <- { scene with GameObjects = scene.GameObjects.Add (id, state) }
-                    //     | _ -> ()
-                    // | EntityDestroyed id ->
-                        // console.log ("destroy entity id", id)
-                        // scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
-                        // broadcastMsg None (ServerMessage.EntityRemoved id)
-                    // | _else -> console.log _else
-                ()
-            with error ->
-                console.log error
-        // c.ondatachannel <- fun ev ->
-        // channel.onerror <- fun ev -> console.log ev
-        c.ondatachannel <- fun ev -> console.log ev
-        c.onconnectionstatechange <- fun ev ->
-            if ev.target?connectionState = "disconnected" then
-                clientConnection <- clientConnection.Remove id
-                broadcastMsg (Some id) (ServerMessage.GameEvent (GameEvent.PlayerDisconnected id))
-            console.log ev
         channel.onopen <- fun ev ->
             // JS.debugger ()
+            let id = nextClientId ()
             let peers = clientConnection.Keys
             clientConnection <- clientConnection.Add (id, channel)
-            game.ApplyEvent (PlayerJoined (id, ""))
             if ev.currentTarget?readyState = "open" then
                 sendMsg id (ServerMessage.WorldState game.Scene)
                 for peerId in peers do
-                    sendMsg id (ServerMessage.GameEvent (PlayerJoined (peerId, "")))
+                //     sendMsg id (ServerMessage.GameEvent (PlayerJoined (peerId, "")))
                     sendMsg peerId (ServerMessage.GameEvent (GameEvent.PlayerJoined (id, "")))
+                game.ApplyEvent (PlayerJoined (id, ""))
+            channel.onmessage <- fun ev ->
+                try
+                    let events = onClientMessage id (Decode.Auto.unsafeFromString (string ev.data))
+                    for event in events do
+                        broadcastMsg None (ServerMessage.GameEvent event)
+                        game.ApplyEvent event
+                        // match event with
+                        // | EnemyDamaged id ->
+                        //     // let ((Enemy (sprite, enemy)), pos) =
+                        //     let entity = scene.GameObjects[id]
+                        //     match scene.GameObjects.TryFind id |> Option.map (fun o -> o.data) with
+                        //     | Some (Enemy (sprite, enemy)) ->
+                        //         match enemy with
+                        //         | Zombie zombie ->
+                        //             let state = { zombie with health = zombie.health - 50.0 }
+                        //             if state.health <= 0 then
+                        //                 scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
+                        //                 broadcastMsg None (ServerMessage.EntityRemoved id)
+                        //             else
+                        //                 let state = { entity with data = Enemy (sprite, Zombie state) }
+                        //                 scene <- { scene with GameObjects = scene.GameObjects.Add (id, state) }
+                        //     | _ -> ()
+                        // | EntityDestroyed id ->
+                            // console.log ("destroy entity id", id)
+                            // scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
+                            // broadcastMsg None (ServerMessage.EntityRemoved id)
+                        // | _else -> console.log _else
+                    ()
+                with error ->
+                    console.log error
+            // c.ondatachannel <- fun ev ->
+            // channel.onerror <- fun ev -> console.log ev
+            c.ondatachannel <- fun ev -> console.log ev
+            c.onconnectionstatechange <- fun ev ->
+                if ev.target?connectionState = "disconnected" then
+                    clientConnection <- clientConnection.Remove id
+                    broadcastMsg (Some id) (ServerMessage.GameEvent (GameEvent.PlayerDisconnected id))
+                console.log ev
         return response
     }
     member this.AddEnemy() =
@@ -140,20 +142,40 @@ type GameServer(world: world.World, scene: Scene) =
     member this.DamageEnemy() =
         ()
     member this.Simulate() = [|
+        // let actions = List()
         for kv in game.Scene.GameObjects do
             match kv.Value.data with
-            | EntityType.Enemy _ ->
-                let pos = kv.Value.position
-                let r = JS.Math.random()
-                if r > 0.1 then
-                    // JS.console.log ("ope = " + (string r))
-                    // JS.console.log (sprintf "%A" (fst kv.Value), snd kv.Value)
-                    let p' = { pos with x = pos.x + 0.01 }
-                    EntityMoved (kv.Key, p')
-                    // scene <- { scene with GameObjects = scene.GameObjects.Add(kv.Key, { kv.Value with position = p' }) }
-                    ()
+            | EntityType.Enemy (sprite, Zombie zombie) ->
+                match zombie.state with
+                | Idle ->
+                    let pos = kv.Value.position
+                    let r = JS.Math.random()
+                    if r > 0.9999 then
+                        // JS.console.log ("ope = " + (string r))
+                        // JS.console.log (sprintf "%A" (fst kv.Value), snd kv.Value)
+                        let playerToChase = game.Scene.GameObjects |> Seq.tryFind (fun o -> match o.Value.data with Player _ -> true | _ -> false )
+                        match playerToChase with
+                        | Some player ->
+                            EntityUpdated (kv.Key, { kv.Value with data = Enemy (sprite, Zombie { zombie with state = ChasingPlayer player.Key }) })
+                        | None -> ()
+                        // let p' = { pos with x = pos.x + 0.01 }
+                        // EntityMoved (kv.Key, p')
+                        // scene <- { scene with GameObjects = scene.GameObjects.Add(kv.Key, { kv.Value with position = p' }) }
+                        ()
+                | ChasingPlayer id ->
+                    match game.Scene.GameObjects.TryFind id with
+                    | Some entity ->
+                        let p = entity.position
+                        let dir = p - kv.Value.position
+                        EntityMoved (kv.Key, kv.Value.position + (dir / 100.0))
+                        // EntityMoved (kv.Key, kv.Value.position + { x = 1.0; y = 0.0; z = 0.0 })
+                        // todo: move towards player
+                        // EntityMoved kv.Key
+                    | None -> ()
+                    // let player =
             | _ ->
                 ()
+        // actions
     |]
     member this.Step() =
         let events = this.Simulate()

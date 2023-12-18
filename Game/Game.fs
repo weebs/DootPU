@@ -73,7 +73,7 @@ type Game(world: world.World, width, height, server) =
     let camera = three.PerspectiveCamera.Create(fov, width / height, nearClip, farClip)
     let renderer = three.WebGLRenderer.Create()
     let geometry = three.BufferGeometry.Create()
-    let mutable players = Map.empty
+    // let mutable players = Map.empty
     let lines =
         let material = three.LineBasicMaterial.Create(box {| color = 0x888888; vertexColors = true |} :?> _)
         let lines = three.Line.Create(geometry, material)
@@ -124,16 +124,19 @@ type Game(world: world.World, width, height, server) =
                 None
         | None -> None
     member this.MoveEntity (id, pos: Network.float3) =
-        let ent = entities[id]
-        // if not server then
-        //     printfn "Move %A to %A" (float3.From ent.sprite.position) pos
-        //     console.log ent
-        ent.collider.setTranslation(RAPIER.Vector3.Create(pos.x, pos.y, pos.z))
-        ent.sprite.position.x <- pos.x
-        ent.sprite.position.y <- pos.y
-        ent.sprite.position.z <- pos.z
-        let state = { scene.GameObjects[id] with position = pos }
-        scene <- { scene with GameObjects = scene.GameObjects.Add(id, state) }
+        // if not server then console.log id
+        match entities.TryGetValue id with
+        | true, ent ->
+            if not server then
+                printfn "Move %A to %A" (float3.From ent.sprite.position) pos
+                console.log ent
+            ent.collider.setTranslation(RAPIER.Vector3.Create(pos.x, pos.y, pos.z))
+            ent.sprite.position.x <- pos.x
+            ent.sprite.position.y <- pos.y
+            ent.sprite.position.z <- pos.z
+            let state = { scene.GameObjects[id] with position = pos }
+            scene <- { scene with GameObjects = scene.GameObjects.Add(id, state) }
+        | _ -> ()
     member this.Delete id =
         scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
         let collider = entities[id].collider
@@ -220,6 +223,8 @@ type Game(world: world.World, width, height, server) =
         renderer.render(gfxScene, camera)
         
         Engine.endInputFrame ()
+    member this.Update (id, value) =
+        scene <- { scene with GameObjects = scene.GameObjects.Add(id, value) }
     member this.ApplyEvent (event: GameEvent) =
         try
             match event with
@@ -229,8 +234,14 @@ type Game(world: world.World, width, height, server) =
                 let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
                 let sprite = three.Sprite.Create m
                 sprite.scale.set(0.5, 0.5, 0.5) |> ignore
+                let collider =
+                    this.World.createCollider(
+                        RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                        this.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                            0, 0, 0)))
                 gfxScene.add sprite |> ignore
-                players <- players.Add(id, (name, sprite))
+                entities.Add (id, { collider = collider; sprite = sprite; id = id; typ = Player name })
+                scene <- { scene with GameObjects = scene.GameObjects.Add(id, { position = float3.From sprite.position; sprite = None; data = Player name }) }
             | EntityDestroyed id ->
                 this.Delete id
                 // match entities.TryGetValue id with
@@ -250,11 +261,19 @@ type Game(world: world.World, width, height, server) =
                     | _ -> ()
                 | _ -> ()
             | PlayerDisconnected id ->
-                match players.TryFind id with
-                | Some (name, sprite) ->
-                    gfxScene.remove sprite |> ignore
-                    players <- players.Remove id
-                | None -> ()
+                this.Delete id
+                // match entities.TryGetValue id with
+                // | true, value ->
+                //     let sprite = value.sprite
+                //     gfxScene.remove sprite |> ignore
+                //     this.Delete 
+                // match scene.GameObjects.TryFind id with
+                // | Some entity ->
+                //     match entity.data with
+                //     | Player name ->
+                //         gfxScene.remove sprite |> ignore
+                //         players <- players.Remove id
+                // | None -> ()
             | EntityMoved(id, position) ->
                 this.MoveEntity (id, position)
                 // match entities.TryGetValue id with
@@ -265,12 +284,16 @@ type Game(world: world.World, width, height, server) =
                 //     ent.sprite.position.z <- position.z
                 // | _ -> ()
             | PlayerUpdated(i, state) ->
-                match players.TryFind i with
-                | Some (name, sprite) ->
+                match entities.TryGetValue i with
+                | true, value ->
+                    let sprite = value.sprite
                     sprite.position.x <- state.Position.x
                     sprite.position.y <- state.Position.y
                     sprite.position.z <- state.Position.z
                     sprite.rotation.y <- state.Rotation
-                | _else -> printfn "no player with id %A" i
+                    scene <- { scene with GameObjects = scene.GameObjects.Add(i, { scene.GameObjects[i] with position = state.Position }) }
+                | _else -> ()
+            | EntityUpdated (id, state) ->
+                this.Update (id, state)
         with error ->
             console.log error
