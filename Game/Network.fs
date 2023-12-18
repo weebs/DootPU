@@ -31,6 +31,8 @@ type float3 =
     member inline this.Tuple = (this.x, this.y, this.z)
     static member (/) (a: float3, b: float) =
         { x = a.x / b; y = a.y / b; z = a.z / b }
+    static member inline From<^a when ^a: (member x: float) and ^a: (member y: float) and ^a: (member z: float)> (value: ^a) =
+        { x = value.x; y = value.y; z = value.z; }
 
 type PlayerState =
     {
@@ -43,6 +45,8 @@ type GameEvent =
     | EnemyDamaged of int
     | PlayerJoined of int * string
     | PlayerDisconnected of int
+    | EntityMoved of int * float3
+    | PlayerUpdated of int * PlayerState
 type [<RequireQualifiedAccess>] ClientMessage =
     | Update of PlayerState
     | DestroyedEntity of id: int
@@ -71,7 +75,7 @@ type [<RequireQualifiedAccess>] ServerMessage =
     // | PlayerDisconnected of Guid
     | WorldState of Scene
     | EntityRemoved of int
-    | EntityMoved of int * float3
+    // | EntityMoved of int * float3
     | GameEvent of GameEvent
     
     

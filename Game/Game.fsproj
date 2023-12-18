@@ -47,7 +47,9 @@
         <Content Include="Tests\audio.html" />
 <!--        <TypeScriptCompile Include="Tests\audio.ts" />-->
         <Compile Include="Tests\Rotations.fs" />
+        <Compile Include="Scene.fs" />
         <Compile Include="Game.fs" />
+        <Compile Include="Game.Client.fs" />
         <Compile Include="Game.Server.fs" />
         <Content Include="*.html" />
         <Folder Include="textures/*" />
