@@ -24,7 +24,8 @@ type GameObject = { // todo: GameWorld
     id: int
     sprite: threejs.__objects_Sprite.Sprite
     collider: Rapier.collider.Collider
-    typ: Network.EntityType
+    // typ: Network.EntityType
+    entity: GameEntity
 }
 // type Scene(world: world.World, scene: threejs.__scenes_Scene.Scene) =
     // let world = GameWorld(world)
@@ -63,7 +64,8 @@ type GameObject = { // todo: GameWorld
             // colliderMap.current.Add(kv.Key, collider)
             // idMap.current.Add(collider, kv.Key)
 type Game(world: world.World, width, height, server) =
-    let mutable scene = { Walls = Map.empty; GameObjects = Map.empty }
+    // let mutable scene = { Walls = Map.empty; GameObjects = Map.empty }
+    let loader = three.TextureLoader.Create()
     let gfxScene =
         let scene = three.Scene.Create()
         scene.background <- box (three.Color.Create(1, 1, 1)) :?> _
@@ -80,14 +82,42 @@ type Game(world: world.World, width, height, server) =
         gfxScene.add lines |> ignore
         lines.visible <- true
         lines
-    let entities = Dictionary()
+    let objects = Dictionary()
     let colliderMap = Dictionary()
+    let mutable walls = Map.empty
     member val DebugPhysics = false with get, set
     member this.Renderer = renderer
     member this.Camera = camera
     member this.ThreeJsScene = gfxScene
     member this.World = world
-    member this.Scene = scene
+    member this.Scene () =
+        {
+            Walls = walls
+            GameObjects = Map.ofSeq (objects |> Seq.map (fun kv ->
+                kv.Key, {
+                    position = kv.Value.entity.position
+                    data = kv.Value.entity.data
+                    sprite = kv.Value.entity.sprite
+                }
+            )) 
+        }
+    member this.Create (entity: GameEntity) =
+        let texture = loader.load (defaultArg entity.sprite "")
+        let kv = {| Value = entity.position |}
+        let m = three.SpriteMaterial.Create(box {| map = texture |} :?> _)
+        let sprite = three.Sprite.Create m
+        let collider =
+            this.World.createCollider(
+                RAPIER.ColliderDesc.cuboid(0.1, 1, 0.1),
+                this.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
+                    kv.Value.x, kv.Value.y, kv.Value.z)))
+        sprite.position.x <- kv.Value.x
+        sprite.position.y <- kv.Value.y
+        sprite.position.z <- kv.Value.z
+        let id = objects |> Seq.maxBy _.Key |> _.Key |> (+) 1
+        objects[id] <- { id = id; entity = entity; collider = collider; sprite = sprite; }
+        id
+    member this.Entities = objects :> IReadOnlyDictionary<_,_>
     member this.AddCube(staticPos, size: Network.float3, pos: Network.float3, ?meshProps: obj) =
         let desc = if staticPos then RAPIER.RigidBodyDesc.newStatic() else RAPIER.RigidBodyDesc.newDynamic()
         let rigidBody = world.createRigidBody(desc.setTranslation(pos.Tuple))
@@ -101,6 +131,12 @@ type Game(world: world.World, width, height, server) =
         mesh.position.z <- pos.z
         gfxScene.add mesh |> ignore
         rigidBody, collider, mesh
+    member this.Raycast(dir) =
+        // let dir = RAPIER.Vector3.Create(x, 0, z)
+        let ray = RAPIER.Ray.Create(RAPIER.Vector3.Create(camera.position.x, camera.position.y, camera.position.z), dir)
+        let raycast = this.World.castRay(ray, 10000, true, QueryFilterFlags.ALL_SHAPES)
+        raycast
+        
     member this.Fire() =
         let x = -1.0 * Math.Sin camera.rotation.y
         let z = -1.0 * Math.Cos camera.rotation.y
@@ -110,43 +146,41 @@ type Game(world: world.World, width, height, server) =
         match raycast with
         | Some raycast ->
             let hitPoint = ray.pointAt(raycast.toi)
-            this.AddCube(true, { x = 0.02; y = 0.02; z = 0.02 }, { x = hitPoint.x; y = hitPoint.y; z = hitPoint.z }, {| color = "blue" |})
-            |> ignore
+            // this.AddCube(true, { x = 0.02; y = 0.02; z = 0.02 }, { x = hitPoint.x; y = hitPoint.y; z = hitPoint.z }, {| color = "blue" |})
+            // |> ignore
             console.log ("camera position =", camera.position.x, camera.position.y, camera.position.z)
             console.log ("hit point =", hitPoint)
             console.log ("dir = ", x, z)
             console.log raycast
             if colliderMap.ContainsKey raycast.collider then
                 let id = colliderMap[raycast.collider]
-                let ent = entities[id]
+                let ent = objects[id]
                 Some (id, ent)
             else
                 None
         | None -> None
     member this.MoveEntity (id, pos: Network.float3) =
         // if not server then console.log id
-        match entities.TryGetValue id with
+        match objects.TryGetValue id with
         | true, ent ->
-            if not server then
-                printfn "Move %A to %A" (float3.From ent.sprite.position) pos
-                console.log ent
             ent.collider.setTranslation(RAPIER.Vector3.Create(pos.x, pos.y, pos.z))
             ent.sprite.position.x <- pos.x
             ent.sprite.position.y <- pos.y
             ent.sprite.position.z <- pos.z
-            let state = { scene.GameObjects[id] with position = pos }
-            scene <- { scene with GameObjects = scene.GameObjects.Add(id, state) }
+            objects[id] <- { ent with entity.position = pos }
+            // let state = { scene.GameObjects[id] with position = pos }
+            // scene <- { scene with GameObjects = scene.GameObjects.Add(id, state) }
         | _ -> ()
     member this.Delete id =
-        scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
-        let collider = entities[id].collider
-        let sprite = entities[id].sprite
-        entities.Remove id |> ignore
+        // scene <- { scene with GameObjects = scene.GameObjects.Remove(id) }
+        let collider = objects[id].collider
+        let sprite = objects[id].sprite
+        objects.Remove id |> ignore
         gfxScene.remove sprite |> ignore
         world.removeCollider (collider, false)
     member this.Load_Scene(world: Network.Scene) =
-        scene <- world
-        let loader = three.TextureLoader.Create()
+        // scene <- world
+        walls <- world.Walls
         let treesTexture = loader.load "textures/ForestTrees.png"
         let rsTreeTexture = "textures/rs/yewtree.png"
         let zombieStanding = loader.load "textures/rs/zombie_standing.png"
@@ -172,8 +206,8 @@ type Game(world: world.World, width, height, server) =
                 match entity.data with
                 | Network.Tree ->
                     loader.load rsTreeTexture
-                | Network.Enemy (spriteName, enemyType) ->
-                    loader.load spriteName
+                | Network.Enemy (enemyType) ->
+                    loader.load kv.Value.sprite.Value
                 | Network.Player playerName ->
                     loader.load "textures/doom/guy.png"
             let kv = {| Key = id, entity; Value = entity.position |}
@@ -206,7 +240,7 @@ type Game(world: world.World, width, height, server) =
                 |> ignore
             | _ -> ()
             let instance = this.ThreeJsScene.add sprite
-            entities.Add(fst kv.Key, { id = fst kv.Key; sprite = sprite; collider = collider; typ = entity.data })
+            objects.Add(fst kv.Key, { entity = entity; id = fst kv.Key; sprite = sprite; collider = collider; })
             colliderMap.Add(collider, fst kv.Key)
     
     
@@ -223,8 +257,8 @@ type Game(world: world.World, width, height, server) =
         renderer.render(gfxScene, camera)
         
         Engine.endInputFrame ()
-    member this.Update (id, value) =
-        scene <- { scene with GameObjects = scene.GameObjects.Add(id, value) }
+    // member this.Update (id, value) =
+        // scene <- { scene with GameObjects = scene.GameObjects.Add(id, value) }
     member this.ApplyEvent (event: GameEvent) =
         try
             match event with
@@ -240,60 +274,105 @@ type Game(world: world.World, width, height, server) =
                         this.World.createRigidBody(RAPIER.RigidBodyDesc.newStatic().setTranslation(
                             0, 0, 0)))
                 gfxScene.add sprite |> ignore
-                entities.Add (id, { collider = collider; sprite = sprite; id = id; typ = Player name })
-                scene <- { scene with GameObjects = scene.GameObjects.Add(id, { position = float3.From sprite.position; sprite = None; data = Player name }) }
+                let data = {
+                    position = float3.From sprite.position; sprite = None
+                    data = Player {
+                        Name = name
+                        Health = 100.0
+                        Status = true
+                        Rotation = 0
+                    }
+                }
+                objects.Add (id, { entity = data; collider = collider; sprite = sprite; id = id; })
+                // scene <- { scene with GameObjects = scene.GameObjects.Add(id, { position = float3.From sprite.position; sprite = None; data = Player name }) }
             | EntityDestroyed id ->
                 this.Delete id
-                // match entities.TryGetValue id with
-                // | true, ent ->
-                //     gfxScene.remove ent.sprite |> ignore
-                //     world.removeCollider (ent.collider, false)
-                //     entities.Remove id |> ignore
-                // | _ -> ()
             | EnemyDamaged id ->
-                match scene.GameObjects.TryFind id with
-                | Some entity ->
-                    match entity.data with
-                    | Enemy (sprite, Zombie state) ->
-                        let state = { state with health = state.health - 50.0 }
-                        let entity = { entity with data = Enemy (sprite, Zombie state) }
-                        scene <- { scene with GameObjects = scene.GameObjects.Add(id, entity) }
+                match objects.TryGetValue id with
+                | true, entity ->
+                    match entity.entity.data with
+                    | Enemy enemy ->
+                        // match enemy.typ with
+                        // | Zombie state ->
+                        let state = { enemy with health = enemy.health - 50.0 }
+                        let entity = { entity with entity.data = Enemy state }
+                        objects[id] <- entity
+                        // scene <- { scene with GameObjects = scene.GameObjects.Add(id, entity) }
                     | _ -> ()
                 | _ -> ()
             | PlayerDisconnected id ->
                 this.Delete id
-                // match entities.TryGetValue id with
-                // | true, value ->
-                //     let sprite = value.sprite
-                //     gfxScene.remove sprite |> ignore
-                //     this.Delete 
-                // match scene.GameObjects.TryFind id with
-                // | Some entity ->
-                //     match entity.data with
-                //     | Player name ->
-                //         gfxScene.remove sprite |> ignore
-                //         players <- players.Remove id
-                // | None -> ()
             | EntityMoved(id, position) ->
                 this.MoveEntity (id, position)
-                // match entities.TryGetValue id with
-                // | true, ent ->
-                //     ent.collider.setTranslation(RAPIER.Vector3.Create(position.Tuple))
-                //     ent.sprite.position.x <- position.x
-                //     ent.sprite.position.y <- position.y
-                //     ent.sprite.position.z <- position.z
-                // | _ -> ()
-            | PlayerUpdated(i, state) ->
-                match entities.TryGetValue i with
+            | PlayerMoved(i, position, rotation) ->
+                match objects.TryGetValue i with
                 | true, value ->
                     let sprite = value.sprite
-                    sprite.position.x <- state.Position.x
-                    sprite.position.y <- state.Position.y
-                    sprite.position.z <- state.Position.z
-                    sprite.rotation.y <- state.Rotation
-                    scene <- { scene with GameObjects = scene.GameObjects.Add(i, { scene.GameObjects[i] with position = state.Position }) }
+                    sprite.position.x <- position.x
+                    sprite.position.y <- position.y
+                    sprite.position.z <- position.z
+                    sprite.rotation.y <- rotation
+                    objects[i] <- { value with entity.position = position }
+                    // scene <- { scene with GameObjects = scene.GameObjects.Add(i, { scene.GameObjects[i] with position = state.Position }) }
                 | _else -> ()
             | EntityUpdated (id, state) ->
-                this.Update (id, state)
+                // todo: update sprite and collider
+                objects[id] <- { objects[id] with entity = state }
+            | PlayerDamaged(id, amount) ->
+                match objects.TryGetValue id with
+                | true, object ->
+                    match object.entity.data with
+                    | Player playerState ->
+                        // if playerState.Health <= amount then
+                            // ()
+                        // else
+                            // ()
+                        objects[id] <- {
+                            object with entity.data = Player { playerState with Health = playerState.Health - amount }
+                        }
+                    | _ -> ()
+                | _ -> ()
+            | PlayerDown id ->
+                match objects.TryGetValue id with
+                | true, object ->
+                    match object.entity.data with
+                    | Player playerState ->
+                        objects[id] <- {
+                            object with entity.data = Player { playerState with Status = false }
+                        }
+                    | _ -> ()
+                | _ -> ()
+                gfxScene.remove objects[id].sprite |> ignore
+                // world.removeCollider (objects[id].collider, false)
+            | PlayerSpawned (id, position) ->
+                // todo: Moving camera and stuff for player
+                match objects.TryGetValue id with
+                | true, object ->
+                    match object.entity.data with
+                    | Player playerState ->
+                        let state = Player {
+                            playerState with
+                                Health = 100
+                                Status = true
+                        }
+                        objects[id] <- { object with entity.data = state; entity.position = position }
+                        gfxScene.add objects[id].sprite |> ignore
+                        objects[id].sprite.position.x <- position.x
+                        objects[id].sprite.position.y <- position.y
+                        objects[id].sprite.position.z <- position.z
+                        objects[id].collider.setTranslation(RAPIER.Vector3.Create(position.Tuple))
+                    | _ -> ()
+                | _ -> ()
+            | UpdateZombie (id, state) ->
+                match objects.TryGetValue id with
+                | true, object ->
+                    match object.entity.data with
+                    | Enemy enemy ->
+                        match enemy.typ with
+                        | Zombie zombie ->
+                            objects[id] <- { object with entity.data = Enemy { enemy with typ = Zombie { state = state } } }
+                        | _ -> ()
+                    | _ -> ()
+                | _ -> ()
         with error ->
             console.log error

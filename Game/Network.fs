@@ -29,8 +29,12 @@ module Signaling =
 type float3 =
     { x: float; y: float; z: float }
     member inline this.Tuple = (this.x, this.y, this.z)
+    member inline this.Length = Math.Sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2)
+    member inline this.Normal = this / this.Length
     static member (/) (a: float3, b: float) =
         { x = a.x / b; y = a.y / b; z = a.z / b }
+    static member (*) (a: float3, b: float) =
+        { x = a.x * b; y = a.y * b; z = a.z * b }
     static member (+) (a: float3, b: float3) =
         { x = a.x + b.x; y = a.y + b.y; z = a.z + b.z }
     static member (-) (a: float3, b: float3) =
@@ -40,24 +44,23 @@ type float3 =
 
 type PlayerState =
     {
-        Position: float3
+        Status: bool
         Rotation: float
+        Health: float
+        Name: string
     }
-/// Events broadcasted by the server    
-type [<RequireQualifiedAccess>] ClientMessage =
-    | Update of PlayerState
-    | DestroyedEntity of id: int
-    | ShotEntity of id: int
 type EnemyType =
     | Zombie of Zombie
-and Zombie = { health: float; state: ZombieState }
+and Zombie = { state: ZombieState }
 and ZombieState =
     | Idle
     | ChasingPlayer of id: int
+    | AttackingPlayer of id: int * framesToAttack: int
+type Enemy = { health: float; typ: EnemyType }
 type EntityType =
     | Tree
-    | Enemy of sprite: string * ``type``: EnemyType
-    | Player of name: string
+    | Enemy of Enemy
+    | Player of PlayerState
 type GameEntity = {
     position: float3
     data: EntityType
@@ -71,13 +74,23 @@ type GameEvent =
     | EntityDestroyed of int
     | EnemyDamaged of int
     | PlayerJoined of int * string
+    | PlayerDamaged of id: int * amount: float
     | PlayerDisconnected of int
     | EntityMoved of int * float3
-    | PlayerUpdated of int * PlayerState
+    | PlayerMoved of int * float3 * float
+    | PlayerDown of id: int
+    | PlayerSpawned of id: int * float3
     | EntityUpdated of int * GameEntity
+    | UpdateZombie of int * ZombieState
 
+type [<RequireQualifiedAccess>] ClientMessage =
+    | Update of PlayerState
+    | PlayerMoved of float3 * float
+    | DestroyedEntity of id: int
+    | ShotEntity of id: int
+/// Events broadcasted by the server    
 type [<RequireQualifiedAccess>] ServerMessage =
-    | UpdatePlayer of int * PlayerState
+    | UpdatePlayer of int * PlayerState * float3
     // | PlayerDisconnected of Guid
     | WorldState of Scene
     | EntityRemoved of int
@@ -134,7 +147,7 @@ module Scene =
                     i, { data = Tree; sprite = Some tree; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
                     i, { data = Tree; sprite = Some tree; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
                 for i in 2001..2201 do
-                    i, { data = Enemy (zombie, Zombie { health = 100.0; state = ZombieState.Idle }); sprite = Some zombie; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
+                    i, { data = Enemy { health = 100.0; typ = Zombie { state = ZombieState.Idle } }; sprite = Some zombie; position = { x = random() * area - (area / 2.0); y = 0.5; z = random() * area - (area / 2.0); } }
             |]
             Walls = mapData |> Map.map (fun _ value -> 0uy, 0uy, 0uy)
         }

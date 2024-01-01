@@ -160,10 +160,9 @@ let GameView (game: Game) =
             if connectionRef.current.IsSome then
                 connectionRef.current.Value.send !^ (
                     Encode.Auto.toString<Network.ClientMessage> (
-                         ClientMessage.Update {
-                              Position = { x = camera.position.x; y = camera.position.y; z = camera.position.z; }
-                              Rotation = camera.rotation.y
-                        }
+                         ClientMessage.PlayerMoved ({
+                             x = camera.position.x; y = camera.position.y; z = camera.position.z;
+                         }, camera.rotation.y)
                     )
                 )
         with error -> console.log error
@@ -199,7 +198,7 @@ let GameView (game: Game) =
                 match Decode.Auto.fromString<ServerMessage> msg with
                 | Ok message ->
                     match message with
-                    | ServerMessage.UpdatePlayer (id, state) ->
+                    | ServerMessage.UpdatePlayer (id, state, position) ->
                         let sprite =
                             if not (peers.current.ContainsKey id) then
                                 let loader = three.TextureLoader.Create()
@@ -212,9 +211,9 @@ let GameView (game: Game) =
                                 sprite
                             else
                                 peers.current[id]
-                        sprite.position.x <- state.Position.x
-                        sprite.position.y <- state.Position.y
-                        sprite.position.z <- state.Position.z
+                        sprite.position.x <- position.x
+                        sprite.position.y <- position.y
+                        sprite.position.z <- position.z
                         sprite.rotation.y <- state.Rotation
                     // | ServerMessage.PlayerDisconnected id ->
                     //     if peers.current.ContainsKey id then
