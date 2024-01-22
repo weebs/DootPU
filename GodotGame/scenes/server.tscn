@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://code/Server.cs" type="Script" id=1]
+[ext_resource path="res://scenes/prefab/Character.tscn" type="PackedScene" id=2]
+
+[node name="Server" type="Spatial"]
+script = ExtResource( 1 )
+Character = ExtResource( 2 )
+
+[node name="Camera" type="Camera" parent="."]
+transform = Transform( 0.567706, 0.49174, -0.660229, -0.320604, 0.870742, 0.372855, 0.758237, -2.25972e-08, 0.651979, -2.05337, 1.53824, 1.78419 )

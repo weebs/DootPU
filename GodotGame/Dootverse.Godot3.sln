@@ -1,0 +1,27 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dootverse.Godot3", "Dootverse.Godot3.csproj", "{A693D89A-F1AC-4A89-80E0-06905F7B4A90}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Dootverse.Godot3.FSharp", "Dootverse.Godot3.FSharp\Dootverse.Godot3.FSharp.fsproj", "{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+	Debug|Any CPU = Debug|Any CPU
+	ExportDebug|Any CPU = ExportDebug|Any CPU
+	ExportRelease|Any CPU = ExportRelease|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A693D89A-F1AC-4A89-80E0-06905F7B4A90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A693D89A-F1AC-4A89-80E0-06905F7B4A90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A693D89A-F1AC-4A89-80E0-06905F7B4A90}.ExportDebug|Any CPU.ActiveCfg = ExportDebug|Any CPU
+		{A693D89A-F1AC-4A89-80E0-06905F7B4A90}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
+		{A693D89A-F1AC-4A89-80E0-06905F7B4A90}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
+		{A693D89A-F1AC-4A89-80E0-06905F7B4A90}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.ExportDebug|Any CPU.Build.0 = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.ExportRelease|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.ExportRelease|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+EndGlobal
