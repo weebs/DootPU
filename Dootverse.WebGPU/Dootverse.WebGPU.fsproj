@@ -7,12 +7,18 @@
 
     <ItemGroup>
 <!--        <Compile Include="Program.fs"/>-->
+        <None Include="WgslQuote.fsx" />
         <Content Include="raymarching.wgsl" />
+        <Compile Include="Wgsl.fs" />
+        <Compile Include="RaymchingSphereTest.fs" />
         <Compile Include="WebGPU.fs" />
     </ItemGroup>
 
     <ItemGroup>
+<!--        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />-->
+        <PackageReference Include="NUnit" Version="4.1.0" />
         <PackageReference Include="Silk.NET.GLFW" Version="2.20.0" />
+        <PackageReference Include="Silk.NET.Input" Version="2.20.0" />
         <PackageReference Include="Silk.NET.WebGPU" Version="2.20.0" />
         <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.20.0" />
         <PackageReference Include="Silk.NET.Windowing" Version="2.20.0" />
