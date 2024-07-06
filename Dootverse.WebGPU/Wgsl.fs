@@ -17,15 +17,21 @@ type BuiltInAttribute(value: Builtin) = inherit Attribute()
 type vec2<'t when
     't :> IAdditionOperators<'t, 't, 't> and
     't :> IMultiplyOperators<'t, 't, 't> and
-    't :> ISubtractionOperators<'t, 't, 't>> = { x: 't; y: 't }
-type vec4<'t when 't :> IAdditionOperators<'t, 't, 't> and 't : (static member (-) : 't * 't -> 't)> = 
+    't :> IDivisionOperators<'t, 't, 't> and
+    't :> ISubtractionOperators<'t, 't, 't>>
+    = { x: 't; y: 't }
+    with
+    member this.xxy = Operators.Unchecked.defaultof<vec3<'t>>
+    member this.yxx = Operators.Unchecked.defaultof<vec3<'t>>
+    member this.xyx = Operators.Unchecked.defaultof<vec3<'t>>
+and vec4<'t when 't :> IAdditionOperators<'t, 't, 't> and 't : (static member (-) : 't * 't -> 't)> = 
     { x: 't; y: 't; z: 't; a: 't }
 // type vec4<'t>(x: 't, y: 't, z: 't, a: 't) =
 //     member this.X with get () = x and set value = ()
 //     member this.Y with get () = y and set value = ()
 //     member this.Z with get () = z and set value = ()
 //     member this.A with get () = a and set value = ()
-type vec3<'t when
+and vec3<'t when
     't :> IAdditionOperators<'t, 't, 't> and
     't :> IMultiplyOperators<'t, 't, 't> and
     't :> ISubtractionOperators<'t, 't, 't> and
@@ -68,6 +74,8 @@ type Wgsl =
     static member vec4(value: vec2<float32>, a, b) = Wgsl.vec4(value.x, value.y, a, b)
     static member vec4(value: vec2<int32>, a, b) = Wgsl.vec4(value.x, value.y, a, b)
     static member vec4(value: uint32) = Wgsl.vec4(value, value, value, value)
+    static member vec4(value: vec3<int32>, a) = Wgsl.vec4(value.x, value.y, value.z, a)
+    static member vec4(value: vec3<float32>, a) = Wgsl.vec4(value.x, value.y, value.z, a)
     static member length (v3: vec3f) = MathF.Sqrt((v3.x * v3.x) + (v3.y * v3.y) + (v3.z + v3.z))
     static member normalize (v3: vec3f) = v3 / Wgsl.length(v3)
     static member sqrt f = MathF.Sqrt f
@@ -407,6 +415,22 @@ let FragmentShader fn = fn
 let VertexShader fn = fn
 let Location n fn = fn
 let BuiltIn (b: Builtin) value = value
+type Expr =
+    | Call of callee: string * args: Expr list
+    | IfThenElse of cond: Expr * whenTrue: Expr * whenFalse: Expr
+    | Let of var: Quotations.Var * value: Expr * e: Expr
+    | WhileLoop of cond: Expr * loop: Expr
+let rec reify (quote: Quotations.Expr) =
+    match quote with
+    | Patterns.WhileLoop (cond, loop) ->
+        WhileLoop (reify cond, reify loop)
+    | Patterns.Let (var, value, expr) ->
+        Let (var, reify value, reify expr)
+    | Patterns.IfThenElse (cond, wt, wf) ->
+        IfThenElse (reify cond, reify wt, reify wf)
+    | Patterns.Call (this, method, args) ->
+        Expr.Call (method.Name, List.map reify args)
+    | _ -> failwith (__SOURCE_FILE__ + ":" + __LINE__)
 let rec frag = Shader.createFragment shader'
 and shader' (screen: Screen, circles: float32[]) = <@
     // {|
@@ -418,6 +442,14 @@ and shader' (screen: Screen, circles: float32[]) = <@
     //     (x * x) + (y * y) + (z * z)
     let distanceSphere (sphere: vec3f) (radius: float32) (point: vec3f) : float32 =
         length(sphere - point) - radius
+    let sphereNormal (origin: vec3f) (radius: float32) (p: vec3f) =
+        let e = vec2(0f, 0.0001f)
+        
+        normalize(vec3(
+            (distanceSphere origin radius (p + e.yxx)) - (distanceSphere origin radius (p - e.yxx)),
+            (distanceSphere origin radius (p + e.xyx)) - (distanceSphere origin radius (p - e.xyx)),
+            (distanceSphere origin radius (p + e.xxy)) - (distanceSphere origin radius (p - e.xxy))
+        ))
     //     
     // let fragment1234 = FragmentShader (fun (output: output) -> Location 0 (
     //     let pixelsPerMeter = 500.0f
@@ -461,7 +493,7 @@ and shader' (screen: Screen, circles: float32[]) = <@
     let fragment = FragmentShader (fun (output: output) -> Location 0 (
         // vec4((1f + output.xy.x) * 0.5f, (1f + output.xy.y) * 0.5f, 0f, 0f)
         let metersPerPixel = 1f / 500f
-        let fl = 1f
+        let fl = 4f
         let cameraOrigin = vec3(0f, 0f, -fl)
         let pixelPosition = vec3(
             output.xy.x * metersPerPixel * screen.width,
@@ -475,9 +507,13 @@ and shader' (screen: Screen, circles: float32[]) = <@
             pos <- pos + (dir * distance)
             distance <- length(sphere - pos) - 1f
         if distance <= 1f then
-            vec4(1f, 1f, 1f, 1f)
+            let n = sphereNormal sphere 1f pos
+            let color = (n + vec3(1f, 1f, 1f)) / 2f
+            vec4(color, 1f)
+            // vec4(1f, 1f, 1f, 1f)
         else
-            vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
+            // vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
+            vec4(0f)
     ))
     
         // vec4(float32 distance)
