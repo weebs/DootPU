@@ -9,13 +9,13 @@
 //          a[0].x*b[1].xyz + b[0].x*a[1].xyz + cross(b[0].yzw, a[1].xyz) + cross(b[1].xyz, a[0].yzw) - b[1].w*a[0].yzw - a[1].w*b[0].yzw, 
 //          a[0].x*b[1].w + b[0].x*a[1].w + dot(a[0].yzw, b[1].xyz) + dot(a[1].xyz, b[0].yzw));
 // }
-struct Screen {
-    gridSize: i32,
-    posX: f32,
-    posY: f32,
-    width: f32,
-    height: f32
-};
+//struct Screen {
+//    gridSize: i32,
+//    posX: f32,
+//    posY: f32,
+//    width: f32,
+//    height: f32
+//};
 struct output {
     @builtin(position) position: vec4f,
     @location(0) xy: vec2f,
@@ -25,8 +25,8 @@ fn rotX(p: vec3f, a: f32) -> vec3f { let s = sin(a); let c = cos(a); let r = p.y
 fn rotY(p: vec3f, a: f32) -> vec3f { let s = sin(a); let c = cos(a); let r = p.zx * mat2x2f(c, s, -s, c); return vec3f(r.y, p.y, r.x); }
 fn rotM(p: vec3f, m: vec2f) -> vec3f { return rotY(rotX(p, 3.14159265 * m.y), 2. * 3.14159265 * m.x); }
 
-@group(0) @binding(0) var<uniform> screen: Screen;
-@group(0) @binding(1) var<storage, read_write> circles: array<f32>;
+//@group(0) @binding(0) var<uniform> screen: Screen;
+//@group(0) @binding(1) var<storage, read_write> circles: array<f32>;
 
 fn sdfSphere(origin: vec3f, radius: f32, pt: vec3f) -> f32 {
     return length(origin - pt) - radius;    
