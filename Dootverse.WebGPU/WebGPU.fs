@@ -55,7 +55,7 @@ for i in 1..100 do
     keys[i] <- false
 let swap () =
     // Create swap
-    surfaceConfig <- new SurfaceConfiguration(
+    surfaceConfig <- SurfaceConfiguration(
         Usage = TextureUsage.RenderAttachment,
         Format = NativePtr.read surfaceCapabilities.Formats,
         PresentMode = PresentMode.Fifo,
@@ -97,43 +97,29 @@ let onWindowLoad () =
     // shaderModule <- wgpu.DeviceCreateShaderModule(device, &shaderModuleDescriptor)
     shaderModule <- wgpu.CreateShader(device, shader)
     wgpu.SurfaceGetCapabilities(surface, adapter, &surfaceCapabilities)
-    let mutable blendState = BlendState(
-        Color = BlendComponent(
-            SrcFactor = BlendFactor.One,
-            DstFactor = BlendFactor.Zero,
-            Operation = BlendOperation.Add
-        ),
-        Alpha = BlendComponent(
-            SrcFactor = BlendFactor.One,
-            DstFactor = BlendFactor.Zero,
-            Operation = BlendOperation.Add
-        )
-    )
     // let vbLayout = VertexBufferLayout(
     //     
     // )
-    let bindGroupLayout = wgpu.CreateBindGroupLayout(device, [|
-        // bindGroupLayout
-        BindGroupLayoutEntry(
-            Binding = 0u,
-            Visibility = (ShaderStage.Vertex ||| ShaderStage.Fragment),
-            Buffer = BufferBindingLayout(
-                Type = BufferBindingType.Uniform,
-                MinBindingSize = binding0Size
-            )
-        )
-        
-        // arrayLayout
-        BindGroupLayoutEntry(
-            Binding = 1u,
-            Visibility = (ShaderStage.Fragment),
-            Buffer = BufferBindingLayout(
-                Type = BufferBindingType.Storage,
-                MinBindingSize = uint64 memSize
-            )
-        )
-    |])
     try
+        let group = wgpu.CreateBuffers device [|
+            { size = binding0Size; isUniform = true }
+            { size = memSize; isUniform = false }
+        |]
+        uniformBuffer <- group.buffers[0]
+        circlesBuffer <- group.buffers[1]
+        bindGroup <- group.bindGroup
+        let mutable blendState = BlendState(
+            Color = BlendComponent(
+                SrcFactor = BlendFactor.One,
+                DstFactor = BlendFactor.Zero,
+                Operation = BlendOperation.Add
+            ),
+            Alpha = BlendComponent(
+                SrcFactor = BlendFactor.One,
+                DstFactor = BlendFactor.Zero,
+                Operation = BlendOperation.Add
+            )
+        )
         let mutable colorTargetState = ColorTargetState(
             Format = NativePtr.read surfaceCapabilities.Formats,
             Blend = &&blendState,
@@ -165,40 +151,9 @@ let onWindowLoad () =
             ),
             Fragment = &&fragmentState,
             DepthStencil = Unchecked.defaultof<_>,
-            Layout = wgpu.CreatePipelineLayout(device, [| bindGroupLayout |])
+            Layout = wgpu.CreatePipelineLayout(device, [| group.bindGroupLayout |])
         )
         renderPipeline  <- wgpu.DeviceCreateRenderPipeline(device, &renderPipelineDescriptor)
-        // let mutable desc = BufferDescriptor(
-        //     Size = 8uL,
-        //     // Usage = (BufferUsage.Vertex ||| BufferUsage.CopyDst)
-        //     Usage = (BufferUsage.Uniform ||| BufferUsage.CopyDst)
-        // )
-        let mutable uniformBufferDesc = BufferDescriptor(
-            Size = binding0Size,
-            Usage = (BufferUsage.CopyDst ||| BufferUsage.Uniform)
-        )
-        let mutable circlesBufferDesc = BufferDescriptor(
-            Size = memSize,
-            Usage = (BufferUsage.Storage ||| BufferUsage.CopyDst)
-        )
-        uniformBuffer <- wgpu.CreateBuffer(device, uniformBufferDesc)
-        circlesBuffer <- wgpu.CreateBuffer(device, circlesBufferDesc)
-        let bindings = [|
-            BindGroupEntry(
-                Binding = 0u,
-                Buffer = uniformBuffer,
-                Offset = 0uL,
-                Size = binding0Size
-            )
-            BindGroupEntry(
-                Binding = 1u,
-                Buffer = circlesBuffer,
-                Offset = 0uL,
-                Size = memSize
-                // Size = 16uL
-            )
-        |]
-        bindGroup <- wgpu.CreateBindGroup(device, bindGroupLayout, bindings)
         // changingVertexBuffer <- wgpu.DeviceCreateBuffer(device, &&desc)
         swap ()
     with error ->
@@ -248,20 +203,15 @@ let onWindowRender t =
     
     let encoderDescriptor = CommandEncoderDescriptor()
     let encoder = wgpu.DeviceCreateCommandEncoder(device, &encoderDescriptor)
-    let mutable colorAttachment = RenderPassColorAttachment(
+    let colorAttachment = RenderPassColorAttachment(
         View = view,
         ResolveTarget = Unchecked.defaultof<_>,
         LoadOp = LoadOp.Clear,
         StoreOp = StoreOp.Store,
         ClearValue = Color(0, 1, 0, 1)
     )
-    let renderPassDescriptor = RenderPassDescriptor(
-        ColorAttachments = &&colorAttachment,
-        ColorAttachmentCount = unativeint 1,
-        DepthStencilAttachment = Unchecked.defaultof<nativeptr<RenderPassDepthStencilAttachment>>
-    )
-    let mutable queue = wgpu.DeviceGetQueue(device)
-    let renderPass = wgpu.CommandEncoderBeginRenderPass(encoder, &renderPassDescriptor)
+    let queue = wgpu.DeviceGetQueue(device)
+    let renderPass = wgpu.StartRenderPass(encoder, [| colorAttachment |])
     wgpu.RenderPassEncoderSetPipeline(renderPass, renderPipeline)
     wgpu.RenderPassEncoderSetBindGroup(renderPass, 0u, bindGroup, unativeint 0, Unchecked.defaultof<nativeptr<_>>)
     // wgpu.RenderPassEncoderSetBindGroup(renderPass, 0u, bindGroup, unativeint 0, Unchecked.defaultof<nativeptr<_>>)
@@ -297,33 +247,6 @@ let onWindowRender t =
             shapes[index + 1] <- (posY + (float32 j * 0.2f))
             shapes[index + 2] <- float32 time
             shapes[index + 3] <- float32 time
-    // for n in -(gridSize * gridSize * 4 / 2)..(gridSize * gridSize * 4 / 2) - 1 do
-    //     let x = n / gridSize
-    //     let y = n % gridSize
-    //     let index = n + (gridSize * gridSize * 4 / 2)
-    //     NativePtr.set shapes index (float32 time)
-    // use shapes = fixed [|
-    //     // for i in -gridSize / 2 .. gridSize / 2 do
-    //     //     for j in -gridSize / 2 .. gridSize / 2 do
-    //     //         float32 time; 0f; 0f; 0f
-    //     // for n in -(gridSize * gridSize / 2)..(gridSize * gridSize / 2) - 1 do
-    //         // let i = n / gridSize
-    //         // let j = n % gridSize
-    //     // for i in 1..16 do
-    //         // for j in 1..16 do
-    //         // posX * 10.0f + (float32 i * 10.0f)
-    //         // posY * 10.0f + (float32 j + 10.0f)
-    //         // posX * 10.0f + (float32 i * 10.0f)
-    //         // posY * 10.0f + (float32 j + 10.0f)
-    //         // float32 time; 0f; 0f; 0f
-    //         // 40f; 0f; 0f; 0f;
-    //         // posY
-    //         // posX
-    //         // posY
-    //     for i in 1..(gridSize * gridSize) do
-    //         float32 time;
-    // |]
-    //
     do
         use shapes = fixed shapes
         wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
@@ -341,7 +264,7 @@ let onWindowRender t =
         wgpu.CommandEncoderRelease(encoder)
         wgpu.TextureViewRelease(view)
         wgpu.TextureRelease(texture.Texture)
-        Marshal.FreeHGlobal (NativePtr.toNativeInt shapes)
+        // Marshal.FreeHGlobal (NativePtr.toNativeInt shapes)
     
 let onFramebufferResize (size: Vector2D<int>) =
     windowWidth <- size.X

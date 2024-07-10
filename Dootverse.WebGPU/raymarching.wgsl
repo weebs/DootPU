@@ -16,10 +16,10 @@
 //    width: f32,
 //    height: f32
 //};
-struct output {
-    @builtin(position) position: vec4f,
-    @location(0) xy: vec2f,
-};
+//struct output {
+//    @builtin(position) position: vec4f,
+//    @location(0) xy: vec2f,
+//};
 
 fn rotX(p: vec3f, a: f32) -> vec3f { let s = sin(a); let c = cos(a); let r = p.yz * mat2x2f(c, s, -s, c); return vec3f(p.x, r.x, r.y); }
 fn rotY(p: vec3f, a: f32) -> vec3f { let s = sin(a); let c = cos(a); let r = p.zx * mat2x2f(c, s, -s, c); return vec3f(r.y, p.y, r.x); }

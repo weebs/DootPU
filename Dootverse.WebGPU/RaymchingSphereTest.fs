@@ -1,5 +1,6 @@
 ﻿module Dootverse.WebGPU.RaymchingSphereTest
 
+open Dootverse.WebGPU.Shaders
 open Wgsl
 open type Wgsl
 
