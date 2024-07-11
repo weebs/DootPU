@@ -39,6 +39,7 @@ type vec2<'t when
     = { x: 't; y: 't }
     with
     member this.xyy = Operators.Unchecked.defaultof<vec3<'t>>
+    member this.xxx = Operators.Unchecked.defaultof<vec3<'t>>
     member this.yxy = Operators.Unchecked.defaultof<vec3<'t>>
     member this.yyx = Operators.Unchecked.defaultof<vec3<'t>>
     member this.xxy = Operators.Unchecked.defaultof<vec3<'t>>

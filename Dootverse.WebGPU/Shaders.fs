@@ -216,11 +216,12 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             pos <- pos + (dir * distance.w)
             // distance <- length(sphere - pos) - 1f
             distance <- getDistance pos
-        pos <- pos + (dir * distance.w)
-        distance <- getDistance pos
+        // pos <- pos + (dir * distance.w)
+        // distance <- getDistance pos
         if distance.w <= 0.001f then
             // let n = sphereNormal sphere 1f pos
-            let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
+            let n = vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f)
+            // let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
             let color = (n + vec3(1f, 1f, 1f)) / 2f
             // let color = vec3(0f, abs(distance.y), abs(distance.z))
             // let color = n

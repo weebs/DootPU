@@ -128,7 +128,7 @@ let onWindowLoad () =
                 yield! BitConverter.GetBytes code
                 yield! BitConverter.GetBytes vec3.x
                 yield! BitConverter.GetBytes vec3.y
-                yield! BitConverter.GetBytes 10f
+                yield! BitConverter.GetBytes vec3.z
                 yield! BitConverter.GetBytes f
                 yield! BitConverter.GetBytes a
             |]
@@ -306,8 +306,9 @@ let onWindowRender t =
         // wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
         shapesVariable.Write (wgpu, queue, 0uL, [|
             for i in 1..100 do
+                let position = Wgsl.Wgsl.vec3(posX + float32 i, 0f, 10f)
                 // let position = Wgsl.Wgsl.vec3(posX + float32 i, posY + float32 i, 10f)
-                let position = Wgsl.Wgsl.vec3(-17f + posX + float32 i, MathF.Cos((float32 i * 0.2f) + float32 time) * 2.48f, 10f)
+                // let position = Wgsl.Wgsl.vec3(-17f + posX + float32 i, MathF.Cos((float32 i * 0.2f) + float32 time) * 2.48f, 10f)
                 let size = 0.42f
                 let tag = i % 3
                 if tag = 0 then Shaders.Sphere (position, size)
