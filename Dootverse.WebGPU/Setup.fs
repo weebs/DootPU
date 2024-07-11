@@ -7,8 +7,66 @@ open Microsoft.FSharp.NativeInterop
 type BufferInfo =
     {
         isUniform: bool
-        size: uint64
+        // size: uint64
+        size: int
     }
+    
+type DotnetBuffer =
+    {
+        ptr: nativeptr<Buffer> ref
+        info: BufferInfo
+    }
+    
+// type 't with todo Extensions to types with a reference to themselves, ie: serializeWith
+//     member this.Foo = ()
+
+[<AutoOpen>]
+module WebGPUBind =
+    // type ShaderBinder<'t>(buffer: nativeptr<Buffer> ref) =
+    // todo : create a RenderInstance type that will hold onto all the buffers so you don't need to save variables?
+    type ShaderBinder<'t>(acc) = // todo : linear types would guarantee that this only gets used once so you don't accidentally unbind another shader
+        let buffer = ref Unchecked.defaultof<nativeptr<Buffer>>
+        member this.Buffer = buffer
+        member this.BufferRefs info =
+            let variables = List.toArray <| List.rev ({ ptr = buffer; info = info } :: acc)
+            variables
+    // type ShaderBinder<'t2, 't1>(buffer: nativeptr<Buffer> ref, cons: ShaderBinder<'t1>) =
+    type ShaderBinder<'t2, 't1>(acc: _ list) =
+        // inherit ShaderBinding<'t1>(cons.Buffer1)
+        let buffer = ref Unchecked.defaultof<nativeptr<Buffer>>
+        // member this.Bindings = bindings
+        member this.Buffer = buffer
+        member this.Rest info = ShaderBinder<'t1>({ ptr = buffer; info = info } :: acc)
+type ShaderVariable<'t>(buffer: _ ref, serializer: 't -> byte[]) =
+    member this.Write(wgpu: WebGPU, queue, data: 't) =
+        let serialized = serializer data
+        let ptr = fixed serialized
+        wgpu.QueueWriteBuffer(queue, buffer.Value, 0uL, NativePtr.toVoidPtr ptr, unativeint serialized.Length)
+    member this.Buffer = buffer.Value
+type ShaderBuffer<'t>(buffer: _ ref, size: int, serializer: 't -> byte[]) =
+    member this.Write(wgpu: WebGPU, queue, offset, data: 't seq) =
+        let bufferData = [| for item in data do yield! serializer item |]
+        let (* todo: use ? *) ptr = fixed bufferData
+        let writeSize = bufferData.Length
+        wgpu.QueueWriteBuffer(queue, buffer.Value, offset, NativePtr.toVoidPtr ptr, unativeint writeSize)
+    member this.Buffer = buffer.Value
+type Wgpu =
+    static member Bind(binding: ShaderBinder<'t[]>) = fun info -> fun serializer ->
+        ShaderBuffer<'t>(binding.Buffer, int info.size, serializer), binding.BufferRefs info
+    static member Bind(bindings: ShaderBinder<'t2[], 't1>) = fun info -> fun serializer ->
+        ShaderBuffer<'t2>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+    static member Shader(shader: Quotations.Expr<'a * 'b -> _>) =
+        Unchecked.defaultof<WebGPUBind.ShaderBinder<'a, 'b>>
+[<AutoOpen>]
+module WebGPUBindExtensions =
+    let inline takesList<'t, 'a when 'a: (member value: 't option)> (value: {| value: 't option; cons: 'a |}) =
+        ()
+    type Wgpu with
+        static member Bind(binding: ShaderBinder<'t>) = fun info serializer ->
+            ShaderVariable<'t>(binding.Buffer, serializer), binding.BufferRefs info
+        static member Bind(binding: ShaderBinder<'t2, 't1>) = fun info serializer ->
+            ShaderVariable<'t2>(binding.Buffer, serializer), binding.Rest info
+            
 
 [<AutoOpen>]
 module Extensions =
@@ -96,12 +154,26 @@ module Extensions =
                         then BufferUsage.Uniform
                         else BufferUsage.Storage
                     BufferDescriptor(
-                        Size = info.size,
+                        Size = uint64 info.size,
                         Usage = (usage ||| BufferUsage.CopyDst)
                     )
             |]
             let layout = this.CreateBindGroupLayout(device, layouts)
-            {| this.CreateBindGroup(device, layout, descriptors) with bindGroupLayout = layout |}
+            {| this.CreateBindGroup(device, layout, descriptors) with
+                bindGroupLayout = layout |}
+        member this.InitBindings device (vars: DotnetBuffer array) =
+            let infos = vars |> Array.map _.info
+            let group = this.CreateBuffers device infos
+            for i in 0..group.buffers.Length - 1 do
+                vars[i].ptr.Value <- group.buffers[i]
+            {| bindGroup = group.bindGroup; layout = group.bindGroupLayout |}
+        member this.CreateBinder device = fun (shader: Quotations.Expr<'a * 'b -> _>) ->
+            // let infoForType (t: System.Type) : BufferInfo =
+                // { isUniform = false; size = 0uL }
+            // let group = this.CreateBuffers device [| infoForType typeof<'a>; infoForType typeof<'b> |]
+            // let a = ref Unchecked.defaultof<_>
+            // let b = ref Unchecked.defaultof<_>
+            ShaderBinder<'a, 'b>([])
         member inline this.StartRenderPass (encoder, descriptors: _ []) =
             let ptr = fixed descriptors
             let renderPass = RenderPassDescriptor(

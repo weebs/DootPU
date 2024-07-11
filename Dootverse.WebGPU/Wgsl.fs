@@ -38,11 +38,14 @@ type vec2<'t when
     't :> ISubtractionOperators<'t, 't, 't>>
     = { x: 't; y: 't }
     with
+    member this.xyy = Operators.Unchecked.defaultof<vec3<'t>>
+    member this.yxy = Operators.Unchecked.defaultof<vec3<'t>>
+    member this.yyx = Operators.Unchecked.defaultof<vec3<'t>>
     member this.xxy = Operators.Unchecked.defaultof<vec3<'t>>
     member this.yxx = Operators.Unchecked.defaultof<vec3<'t>>
     member this.xyx = Operators.Unchecked.defaultof<vec3<'t>>
 and vec4<'t when 't :> IAdditionOperators<'t, 't, 't> and 't : (static member (-) : 't * 't -> 't)> = 
-    { x: 't; y: 't; z: 't; a: 't }
+    { mutable x: 't; mutable y: 't; mutable z: 't; mutable w: 't }
 // type vec4<'t>(x: 't, y: 't, z: 't, a: 't) =
 //     member this.X with get () = x and set value = ()
 //     member this.Y with get () = y and set value = ()
@@ -66,6 +69,8 @@ and vec3<'t when
         (v3: vec3<'t>, scale: 't) = { x = v3.x / scale; y = v3.y / scale; z = v3.z / scale }
     static member op_Multiplication
         (v3: vec3<'t>, scale: 't) = { x = v3.x * scale; y = v3.y * scale; z = v3.z * scale }
+    static member op_Addition
+        (v3: vec3<'t>, scale: 't) = { x = v3.x + scale; y = v3.y + scale; z = v3.z + scale }
     static member op_Multiplication
         (scale: 't, v3: vec3<'t>) = { x = v3.x * scale; y = v3.y * scale; z = v3.z * scale }
     static member op_Subtraction
@@ -83,9 +88,17 @@ type mat2x2<'t>(mx: 't, my: 't, ma: 't, mb: 't) =
     static member (*) (m: mat2x2<float32>, b: float32) = m
 type Foo<'t> = 't
 type Wgsl =
+    static member abs(p: vec3f) = failwith ""
+    static member abs(f: float32) = MathF.Abs(f)
+    static member abs(f: vec3f) : vec3f = failwith ""
+    static member min(a: float32, b: float32) = MathF.Min(a, b)
+    static member max(a: vec3f, b: vec3f) = failwith ""
+    // static member max(a: vec3f, b: float32) = failwith ""
+    static member max(a: float32, b: float32) = MathF.Max(a, b)
     static member inline vec2(a, b) = { x = a; y = b; }
+    static member inline vec3(a) = { x = a; y = a; z = a }
     static member inline vec3(a, b, c) = { x = a; y = b; z = c }
-    static member inline vec4(a, b, c, d) = { x = a; y = b; z = c; a = d; }
+    static member inline vec4(a, b, c, d) = { x = a; y = b; z = c; w = d; }
     static member vec4(value: float32) = Wgsl.vec4(value, value, value, value)
     static member vec4(value: int32) = Wgsl.vec4(value, value, value, value)
     static member vec4(value: vec2<float32>, a, b) = Wgsl.vec4(value.x, value.y, a, b)

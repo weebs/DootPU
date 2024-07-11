@@ -48,8 +48,10 @@ type WgslExpr =
     | Call of callee: string * args: WgslExpr list
     | Ident of name: string
     | PropGet of source: WgslExpr * field: string
+    | IndexAccess of array: WgslExpr * index: WgslExpr
     | Value of WgslConst
     | BinaryAnd of WgslExpr * WgslExpr
+    | BinaryEq of WgslExpr * WgslExpr
     | Array of WgslType * WgslExpr list
 type WgslStatement =
     | ExprStatement of WgslExpr
@@ -117,9 +119,12 @@ module rec Print =
                 if s.Contains "." then s else s + ".0"
             | Unsigned u -> $"{u}"
         | BinaryAnd(wgslExpr, e) -> $"({expr wgslExpr} && {expr e})"
+        | BinaryEq(wgslExpr, e) -> $"({expr wgslExpr} == {expr e})"
         | Array (t, values) ->
             let args = List.map expr values |> String.concat ", "
             $"array<{type' t}, {values.Length}>({args})"
+        | IndexAccess(wgslExpr, index) ->
+            $"{expr wgslExpr}[{expr index}]"
         | _ -> failwith ""
     let statement (stmt: WgslStatement) =
         match stmt with
@@ -257,6 +262,8 @@ and translateExpr (expr: Quotations.Expr) =
     match expr with
     | Patterns.IfThenElse (cond, true', Patterns.Value (o, t)) when t = typeof<bool> && (o :?> bool) = false ->
         BinaryAnd (translateExpr cond, translateExpr true')
+    | Patterns.UnionCaseTest (e, info) ->
+        BinaryEq (PropGet(translateExpr e, "tag"), Value (Int info.Tag))
     // | Patterns.IfThenElse (Patterns.IfThenElse ifte as cond, true', Patterns.Value (o, t)) when t = typeof<bool> && (o :?> bool) = false ->
     //     match cond with
     //     | Patterns.IfThenElse (cond)
@@ -289,11 +296,133 @@ and translateExpr (expr: Quotations.Expr) =
     | Patterns.Call (thisArg, methodInfo, args) ->
         Call (methodInfo.Name, List.map translateExpr args)
     | _ -> failwith $"Unrecognized pattern in translateExpr: {expr}"
+and translateWgslValue t this_ offset =
+    if t = typeof<vec3<float32>> then
+        let args = [
+            IndexAccess (PropGet (this_, "data"), Value (Int <| offset + 0))
+            IndexAccess (PropGet (this_, "data"), Value (Int <| offset + 1))
+            IndexAccess (PropGet (this_, "data"), Value (Int <| offset + 2))
+        ]
+        Call ("vec3f", args)
+    elif t = typeof<float32> then
+        IndexAccess (PropGet (this_, "data"), Value (Int offset))
+    elif t = typeof<float32> then
+        Call("bitcast<i32>", [
+            IndexAccess (PropGet (this_, "data"), Value (Int offset))
+        ])
+    else
+        failwith ""
+and sizeofType (t: Type) =
+    if t = typeof<vec3<float32>> then 3
+    else 1
+and (|UnionLet|_|) e =
+    match e with
+    | Patterns.Let (variable, Patterns.PropertyGet (Some this, prop, args), rest) ->
+      // when FSharpType.IsUnion this.Type && prop.Name.StartsWith "Item" ->
+        let isUnion = FSharpType.IsUnion this.Type
+        let startsWithItem = prop.Name.StartsWith "Item"
+        if isUnion && startsWithItem then
+            let index = Int32.Parse (prop.Name.Substring("Item".Length))
+            Some (variable, index, rest)
+        else
+            None
+    | _ -> None
+and getLetExprs e =
+    let rec loop acc e =
+        match e with
+        | UnionLet (variable, index, rest) ->
+            let acc = (variable, index) :: acc
+            match rest with
+            | UnionLet _ ->
+                loop acc rest
+            | _ ->
+                List.rev acc, rest
+        | _ ->
+            List.rev acc, e
+    loop [] e
+and (|MatchExpr|_|) (statement: Quotations.Expr) =
+    match statement with
+    | Patterns.IfThenElse (Patterns.UnionCaseTest (union, info), ifCase, else_) ->
+        // Some (union, info, getLetExprs ifCase, else_)
+        Some (union, info, getLetExprs ifCase, else_)
+    | _ ->
+        None
+and getMatchExprs statement =
+    let rec loop acc statement =
+        match statement with
+        // | MatchExpr (union, info, ifCase, else_) ->
+        | MatchExpr (union, info, ifCase, else_) ->
+            // let acc = ((union, info, ifCase) :: acc)
+            // let acc = ((info.Tag, ifCase) :: acc)
+            let acc = (info.Tag, ifCase) :: acc
+            match else_ with
+            | MatchExpr _ ->
+                loop acc else_
+            | UnionLet _ ->
+                let e = getLetExprs else_
+                let nums = acc |> List.map fst |> List.toArray
+                let cases = FSharpType.GetUnionCases info.DeclaringType
+                let missing =
+                    [| for i in 0..cases.Length - 1 do
+                        if Array.contains i nums = false then i |]
+                    |> Array.head
+                // let nums = 
+                // let missing =
+                Some (union, info.DeclaringType, acc @ [ (missing, e) ], None)
+                // Some (acc, else_)
+            | _ ->
+                Some (union, info.DeclaringType, acc, Some else_)
+        | _ ->
+            // [], statement
+            None
+    loop [] statement
+and (|DecisionTree|_|) (statement: Quotations.Expr) = getMatchExprs statement
+    // match statement with
+    // | MatchExpr _ ->
+    //     let acc, e = getMatchExprs statement
+    //     Some (acc, e)
+    // | _ ->
+    //     None
 and translateStatement (statement: Quotations.Expr) =
     match statement with
-    | Patterns.Application (callee, arg) -> []
+    | DecisionTree (union, ut, acc, e) ->
+        let cases = FSharpType.GetUnionCases ut
+        let unionExpr = translateExpr union
+        let createBindings (tag: int) (bindings: (Quotations.Var * int) list) =
+            let caseFields = cases[tag].GetFields()
+            let caseSizes = caseFields |> Array.map (_.PropertyType >> sizeofType)
+            let caseOffsets = caseSizes |> Array.mapi (fun index _ -> Array.sum (Array.take index caseSizes))
+            printfn $""
+            (bindings, []) ||> List.foldBack (fun (var, item) acc ->
+                let offset = caseOffsets[item - 1]
+                LetDeclaration (var.Name, translateWgslValue caseFields[item - 1].PropertyType unionExpr offset)
+                :: acc
+            )
+        let rec loop = function
+            | (tag, (bindings, expr)) :: [] ->
+                let cond = BinaryEq (PropGet (translateExpr union, "tag"), Value (Int tag))
+                match e with
+                | Some e -> [ IfThenElse (cond, createBindings tag bindings @ translateStatement expr, translateStatement e) ]
+                | None ->
+                    let letStatements = createBindings tag bindings
+                    let condStatements = translateStatement expr
+                    letStatements @ condStatements
+            | (tag, (bindings, expr)) :: rest ->
+                let cond = BinaryEq (PropGet (translateExpr union, "tag"), Value (Int tag))
+                [ IfThenElse(cond, createBindings tag bindings @ translateStatement expr, loop rest) ]
+        let result = loop acc
+        // ((), [ 1; 2; 3; 4; 5 ]) ||> List.fold (fun _ value -> printfn $"{value}")
+        result
+    // | Patterns.Application (callee, arg) -> []
     | Patterns.Let (variable, value, e) ->
         match value with
+        // | Patterns.PropertyGet (Some this, prop, args)
+        //   when FSharpType.IsUnion this.Type && prop.Name.StartsWith "Item" ->
+        //     let info = FSharpType.GetUnionCases this.Type
+        //     let index = Int32.Parse (prop.Name.Substring("Item".Length))
+        //     let offset = 0
+        //     let this_ = translateExpr this
+        //     translatedWgslValue  @ translateStatement e
         | Patterns.Lambda (var, absExpr) ->
             [] // TODO lambda
         | _ ->
@@ -305,6 +434,32 @@ and translateStatement (statement: Quotations.Expr) =
                 :: translateStatement e
     | Patterns.Call (thisArg, method, args) when method.Name = "VertexShader" ->
         []
+    | Patterns.IfThenElse (Patterns.UnionCaseTest (union, info) as cond, ifCase, else_) ->
+        let createVariables (info: UnionCaseInfo) (bindings: (Quotations.Var * int) list) =
+            let fieldSizes = info.GetFields() |> Array.map (_.PropertyType >> sizeofType)
+            let fieldOffsets = fieldSizes |> Array.mapi (fun i _ -> Array.sum (Array.take i fieldSizes))
+            [
+                // for (var, caseTag) in bindings do
+                for index in 0..bindings.Length - 1 do
+                    let (var, caseTag) = bindings[index]
+                    // let t = info.GetFields()[caseTag]
+                    LetDeclaration (var.Name, translateWgslValue var.Type (translateExpr union) fieldOffsets[index])
+            ]
+        let rec loop e acc =
+            match e with
+            | UnionLet (variable, index, rest) -> loop rest ((variable, index) :: acc)
+            | _ -> List.rev acc, e
+        let bindings, rest = loop ifCase []
+        let variables = createVariables info bindings
+        let result = variables @ translateStatement rest
+        let elseVars, elseBranch = loop else_ []
+        // todo if the elseVars list is not empty, translate the union cases there too!
+        if elseVars.Length = 0 then
+            [ IfThenElse (translateExpr cond, result, translateStatement else_) ]
+        else
+            let variables' = createVariables info elseVars
+            let result' = variables' @ translateStatement rest
+            [ IfThenElse (translateExpr cond, result, result' @ translateStatement elseBranch) ]
     | Patterns.IfThenElse (cond, true', false') ->
         [ IfThenElse (translateExpr cond, translateStatement true', translateStatement false') ]
     | Patterns.WhileLoop (cond, loop) ->
@@ -313,6 +468,7 @@ and translateStatement (statement: Quotations.Expr) =
         translateStatement e @ translateStatement e'
     | Patterns.VarSet (var, value) ->
         [ Assign (var.Name, translateExpr value) ]
+    | Patterns.Value (null, t) when t = typeof<unit> -> []
     | e -> [ ExprStatement (translateExpr e) ]
 and getLambdaExprReturn e =
     match e with
@@ -362,8 +518,9 @@ and translateModuleItem (item: Quotations.Expr) (module_: Module) =
         |> translateModuleItem e
     | Patterns.Let (v, (Patterns.Lambda (arg1, absExpr) as l), following) ->
         let args, abs, t' = function' l
-        let rt_ = getLambdaExprReturn absExpr
-        let rt = match rt_ with | t when t = typeof<unit> -> None | t -> Some (toType t)
+        // let rt_ = getLambdaExprReturn absExpr
+        let rt = Some t'
+        // let rt = match rt_ with | t when t = typeof<unit> -> None | t -> Some (toType t)
         { module_ with
             fns = module_.fns.Add(v.Name, {
                 name = v.Name
@@ -513,8 +670,17 @@ and (|WgslStruct|_|) (t: Type) : WgslStruct option =
                 )
             f.Name, toType f.PropertyType,  attributes)
         Some (t.Name, (List.ofArray result))
-    elif FSharpType.IsUnion t then
-        None
+    elif FSharpType.IsUnion t && not (t.Name.Contains "List") && not (t = typeof<Builtin>) then
+        let caseSizes =
+            FSharpType.GetUnionCases(t)
+            |> Array.map (_.GetFields())
+            |> Array.map (Array.map (_.PropertyType >> sizeofType))
+            |> Array.map Array.sum
+        let sizeOfStruct = Array.max caseSizes
+        Some (t.Name, [
+            "tag", WgslType.Int, [||]
+            "data", WgslType.DefinedType $"array<f32, {sizeOfStruct}>", [||]
+        ])
     else
         None
 and structsUsedByType (t: Type) : WgslStruct array =

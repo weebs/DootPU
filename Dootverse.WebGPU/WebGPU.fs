@@ -1,4 +1,5 @@
 ﻿module WebGPU
+open System
 open System.Runtime.InteropServices
 open Dootverse.WebGPU
 open Silk.NET.Input
@@ -9,8 +10,13 @@ open Silk.NET.WebGPU
 open Silk.NET.Windowing
 open System.Collections.Generic
 
+module Demo =
+    let shaderQuotation = <@ fun (floats: float32[], float: float32) -> () @>
+
 let gridSize = 22
 let memSize = uint64 (gridSize * gridSize * 4 * sizeof<float32>)
+let shapesBufferSize = 100 * 6 * 4
+
 let shapes = [|
     for i in 1..(gridSize * gridSize) do
         0f; 0f; 0f; 0f
@@ -45,6 +51,8 @@ let mutable shaderModule = Unchecked.defaultof<nativeptr<ShaderModule>>
 let mutable renderPipeline = Unchecked.defaultof<nativeptr<RenderPipeline>>
 // let mutable changingVertexBuffer = Unchecked.defaultof<nativeptr<_>>
 let mutable uniformBuffer = Unchecked.defaultof<nativeptr<_>>
+let mutable screenVar = Unchecked.defaultof<_>
+let mutable shapesVariable = Unchecked.defaultof<_>
 let mutable circlesBuffer = Unchecked.defaultof<nativeptr<_>>
 let mutable bindGroup = Unchecked.defaultof<_>
 let window = Window.Create options
@@ -101,13 +109,51 @@ let onWindowLoad () =
     //     
     // )
     try
-        let group = wgpu.CreateBuffers device [|
-            { size = binding0Size; isUniform = true }
-            { size = memSize; isUniform = false }
-        |]
-        uniformBuffer <- group.buffers[0]
-        circlesBuffer <- group.buffers[1]
+        let serializeScreen (value: Shaders.Screen) =
+            [|
+                yield! BitConverter.GetBytes value.gridSize
+                yield! BitConverter.GetBytes value.posX
+                yield! BitConverter.GetBytes value.posY
+                yield! BitConverter.GetBytes value.width
+                yield! BitConverter.GetBytes value.height
+            |]
+        let binds = wgpu.CreateBinder device Shaders.shader'
+        let serializeShape (shape: Shaders.Shape) =
+            let code, vec3, f, a =
+                match shape with
+                | Shaders.Sphere(vec3, f) -> 0, vec3, f, 0f
+                | Shaders.Cube(vec3, f) -> 1, vec3, f, 0f
+                | Shaders.RoundedCube(vec3, f, a) -> 2, vec3, f, a
+            [|
+                yield! BitConverter.GetBytes code
+                yield! BitConverter.GetBytes vec3.x
+                yield! BitConverter.GetBytes vec3.y
+                yield! BitConverter.GetBytes 10f
+                yield! BitConverter.GetBytes f
+                yield! BitConverter.GetBytes a
+            |]
+        let (screen, binds) = Wgpu.Bind binds { isUniform = true; size = 5 * 4 } serializeScreen
+        // let (circles, binds) = Wgpu.Bind binds { isUniform = true; size = 4 * 10 } (fun _ -> [||])
+        let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = int memSize } serializeShape
+        let group = wgpu.InitBindings device binds
+        screenVar <- screen
+        shapesVariable <- shapes
+        uniformBuffer <- screen.Buffer
+        circlesBuffer <- shapes.Buffer
         bindGroup <- group.bindGroup
+        // let group = wgpu.CreateBuffers device [|
+        //     { size = int binding0Size; isUniform = true }
+        //     { size = int memSize; isUniform = false }
+        // |]
+        // uniformBuffer <- group.buffers[0]
+        // circlesBuffer <- group.buffers[1]
+        // bindGroup <- group.bindGroup
+        // let mainFunction () =
+        //     let serializer t = [||]
+        //     let m = Wgpu.Shader Shaders.shader'
+        //     let screen, m = Wgpu.Bind m serializeScreen
+        //     let circles = Wgpu.Bind m 100 serializer
+        //     ()
         let mutable blendState = BlendState(
             Color = BlendComponent(
                 SrcFactor = BlendFactor.One,
@@ -151,7 +197,8 @@ let onWindowLoad () =
             ),
             Fragment = &&fragmentState,
             DepthStencil = Unchecked.defaultof<_>,
-            Layout = wgpu.CreatePipelineLayout(device, [| group.bindGroupLayout |])
+            // Layout = wgpu.CreatePipelineLayout(device, [| group.bindGroupLayout |])
+            Layout = wgpu.CreatePipelineLayout(device, [| group.layout |])
         )
         renderPipeline  <- wgpu.DeviceCreateRenderPipeline(device, &renderPipelineDescriptor)
         // changingVertexBuffer <- wgpu.DeviceCreateBuffer(device, &&desc)
@@ -249,8 +296,25 @@ let onWindowRender t =
             shapes[index + 3] <- float32 time
     do
         use shapes = fixed shapes
-        wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
-        wgpu.QueueWriteBuffer(queue, circlesBuffer, 0uL, shapes |> NativePtr.toVoidPtr, unativeint memSize)
+        screenVar.Write(wgpu, queue, {
+            gridSize = 0
+            posX = posX
+            posY = posY
+            width = float32 windowWidth
+            height = float32 windowHeight
+        })
+        // wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
+        shapesVariable.Write (wgpu, queue, 0uL, [|
+            for i in 1..100 do
+                // let position = Wgsl.Wgsl.vec3(posX + float32 i, posY + float32 i, 10f)
+                let position = Wgsl.Wgsl.vec3(-17f + posX + float32 i, MathF.Cos((float32 i * 0.2f) + float32 time) * 2.48f, 10f)
+                let size = 0.42f
+                let tag = i % 3
+                if tag = 0 then Shaders.Sphere (position, size)
+                elif tag = 1 then Shaders.Cube (position, size)
+                else Shaders.RoundedCube (position, size, 0.12f)
+        |])
+        // wgpu.QueueWriteBuffer(queue, circlesBuffer, 0uL, shapes |> NativePtr.toVoidPtr, unativeint memSize)
         
         wgpu.RenderPassEncoderDraw(renderPass, 6u, 2u, 0u, 0u)
         wgpu.RenderPassEncoderEnd(renderPass)
