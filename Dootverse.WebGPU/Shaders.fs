@@ -103,16 +103,23 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
         
     let shapeNormal (shape: Shape) (p: vec3f) =
         // let e = vec2(0f, 0.0001f)
-        let e = vec2(0.0001f, 0f)
-        
-        (normalize(vec3(
-            // (shapeDistance shape (p + e.yxx)) - (shapeDistance shape (p - e.yxx)),
-            // (shapeDistance shape (p + e.xyx)) - (shapeDistance shape (p - e.xyx)),
-            // (shapeDistance shape (p + e.xxy)) - (shapeDistance shape (p - e.xxy))
-            (shapeDistance shape (p + e.xyy)) - (shapeDistance shape (p - e.xyy)),
-            (shapeDistance shape (p + e.yxy)) - (shapeDistance shape (p - e.yxy)),
-            (shapeDistance shape (p + e.yyx)) - (shapeDistance shape (p - e.yyx))
-        )))
+        // let e = vec2(0.0001f, 0f)
+        //
+        // normalize(vec3(
+        //     // (shapeDistance shape (p + e.yxx)) - (shapeDistance shape (p - e.yxx)),
+        //     // (shapeDistance shape (p + e.xyx)) - (shapeDistance shape (p - e.xyx)),
+        //     // (shapeDistance shape (p + e.xxy)) - (shapeDistance shape (p - e.xxy))
+        //     (shapeDistance shape (p + e.xyy)) - (shapeDistance shape (p - e.xyy)),
+        //     (shapeDistance shape (p + e.yxy)) - (shapeDistance shape (p - e.yxy)),
+        //     (shapeDistance shape (p + e.yyx)) - (shapeDistance shape (p - e.yyx))
+        // ))
+        let h = 0.001f; // replace by an appropriate value
+        let k = vec2(1f,-1f);
+        normalize(
+            k.xyy* shapeDistance shape ( p + k.xyy*h ) + 
+            k.yyx* shapeDistance shape ( p + k.yyx*h ) + 
+            k.yxy* shapeDistance shape ( p + k.yxy*h ) + 
+            k.xxx* shapeDistance shape ( p + k.xxx*h ) );
         
     let getDistance (point: vec3f) : vec4<float32> =
         let mutable minDistance = 1000000f
@@ -125,6 +132,8 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             minDistance <- min(minDistance, distance)
             if minDistance <= 0.01f then
                 normalValue <- shapeNormal shape point
+                let v = shapePoint shape
+                normalValue <- sphereNormal v 0.422f point
             // match shape with
             // | Sphere(v3, f) ->
             //     // minDistance <- min(1000f, minDistance)
@@ -138,10 +147,20 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             //     minDistance <- min(sdfRoundedBox v3 f f1 point, minDistance)
         // normalValue.z <- minDistance
         // normalValue
-        vec4(normalValue.x, normalValue.y, normalValue.z, minDistance)
+        // vec4(normalValue.x, normalValue.y, normalValue.z, minDistance)
+        vec4(normalValue, minDistance)
+    let sphereShader (output: output) =
+        vec4(0f)
         // minDistance
-    let fragment = FragmentShader (fun (output: output) -> Location 0 (
-        // vec4((1f + output.xy.x) * 0.5f, (1f + output.xy.y) * 0.5f, 0f, 0f)
+    let normalForRoundedBox b size round p =
+        let h = 0.001f; // replace by an appropriate value
+        let k = vec2(1f,-1f);
+        normalize(
+            k.xyy* sdfRoundedBox b size round ( p + k.xyy*h ) + 
+            k.yyx* sdfRoundedBox b size round ( p + k.yyx*h ) + 
+            k.yxy* sdfRoundedBox b size round ( p + k.yxy*h ) + 
+            k.xxx* sdfRoundedBox b size round ( p + k.xxx*h ) );
+    let fragment_single = FragmentShader (fun (output: output) -> Location 0 (
         let metersPerPixel = 1f / 500f
         let fl = 4f
         let cameraOrigin = vec3(0f, 0f, -fl)
@@ -153,16 +172,59 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
         // let mutable distance = length(sphere - pixelPosition) - 1f
         let dir = normalize(pixelPosition - cameraOrigin)
         let mutable pos = pixelPosition
+        // let mutable distance = length (sphere - pos) - 1f
+        let mutable distance = sdfRoundedBox sphere 1f 0.4f pos
+        while distance > 0.01f && distance < 100f do
+            pos <- pos + (dir * distance)
+            distance <- sdfRoundedBox sphere 1f 0.4f pos
+            // distance <- length(sphere - pos) - 1f
+            // distance <- getDistance pos
+        pos <- pos + (dir * distance)
+        // distance <- length(sphere - pos) - 1f
+        distance <- sdfRoundedBox sphere 1f 0.4f pos
+        if distance <= 1f then
+            // let n = sphereNormal sphere 1f pos
+            let n = normalForRoundedBox sphere 1f 0.4f pos
+            // let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
+            let color = (n + vec3(1f, 1f, 1f)) / 2f
+            // let color = n
+            // let color = vec3(0f, abs(distance.y), abs(distance.z))
+            // let color = n
+            // let color = n
+            // vec4(distance.x, distance.y, distance.z, 1f)
+            vec4(color, 1f)
+            // vec4(1f, 1f, 1f, 1f)
+        else
+            // vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
+            vec4(0f)
+    ))
+    let fragment = FragmentShader (fun (output: output) -> Location 0 (
+        // vec4((1f + output.xy.x) * 0.5f, (1f + output.xy.y) * 0.5f, 0f, 0f)
+        let metersPerPixel = 1f / 500f
+        let fl = 4f
+        let cameraOrigin = vec3(0f, 0f, -fl)
+        let pixelPosition = vec3(
+            output.xy.x * metersPerPixel * screen.width,
+            output.xy.y * metersPerPixel * screen.height, 
+            0f)
+        // let sphere = vec3(screen.posX, screen.posY, 4f)
+        // let mutable distance = length(sphere - pixelPosition) - 1f
+        let dir = normalize(pixelPosition - cameraOrigin)
+        let mutable pos = pixelPosition
         let mutable distance = getDistance pos
         while distance.w > 0.01f && distance.w < 100f do
             pos <- pos + (dir * distance.w)
             // distance <- length(sphere - pos) - 1f
             distance <- getDistance pos
-        if distance.w <= 1f then
+        pos <- pos + (dir * distance.w)
+        distance <- getDistance pos
+        if distance.w <= 0.001f then
             // let n = sphereNormal sphere 1f pos
-            let n = vec3(distance.x, distance.y, distance.z)
-            // let color = (n + vec3(1f, 1f, 1f)) / 2f
-            let color = n
+            let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
+            let color = (n + vec3(1f, 1f, 1f)) / 2f
+            // let color = vec3(0f, abs(distance.y), abs(distance.z))
+            // let color = n
+            // let color = n
             // vec4(distance.x, distance.y, distance.z, 1f)
             vec4(color, 1f)
             // vec4(1f, 1f, 1f, 1f)
