@@ -34,6 +34,7 @@ type Screen = {
     width: float32
     height: float32
 }
+type Voxel = { index: int; count: int }
 let FragmentShader fn = fn
 let VertexShader fn = fn
 let Location n fn = fn
@@ -42,9 +43,11 @@ let Var (items: VarType list) value = value
 let rec frag = Shader.createFragment shader'
 // and shader' (screen: Screen, circles: float32[]) = <@
 // and shader' = <@ fun (Screen: Screen, Circles: float32[]) ->
-and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
+and shader' = <@ fun (Screen: Screen, Shapes: Shape[], Voxels: Voxel[], VoxelData: int[]) ->
     let screen = Var [Uniform] Screen
     let shapes = Var [Storage; ReadWrite] Shapes
+    let voxels = Var [Storage; ReadWrite] Shapes
+    let voxelData = Var [Storage; ReadWrite] VoxelData;
     // {|
         // fragment = fun (output: VertexOutput) ->
     
@@ -95,7 +98,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
         | Cube(v3, f) -> sdfBox v3 f point
         | RoundedCube(v3, f, r) -> sdfRoundedBox v3 f r point
         
-    let shapePoint (shape: Shape) =
+    let shapePosition (shape: Shape) =
         match shape with
         | Sphere(v3, f) -> v3
         | Cube(v3, f) -> v3
@@ -121,7 +124,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             k.yxy* shapeDistance shape ( p + k.yxy*h ) + 
             k.xxx* shapeDistance shape ( p + k.xxx*h ) );
         
-    let getDistance (point: vec3f) : vec4<float32> =
+    let getDistanceWithNormal (point: vec3f) : vec4<float32> =
         let mutable minDistance = 1000000f
         let mutable index = 0
         let mutable normalValue = vec3(0f)
@@ -132,7 +135,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             minDistance <- min(minDistance, distance)
             if minDistance <= 0.01f then
                 normalValue <- shapeNormal shape point
-                let v = shapePoint shape
+                let v = shapePosition shape
                 normalValue <- sphereNormal v 0.422f point
             // match shape with
             // | Sphere(v3, f) ->
@@ -160,7 +163,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             k.yyx* sdfRoundedBox b size round ( p + k.yyx*h ) + 
             k.yxy* sdfRoundedBox b size round ( p + k.yxy*h ) + 
             k.xxx* sdfRoundedBox b size round ( p + k.xxx*h ) );
-    let fragment_single = FragmentShader (fun (output: output) -> Location 0 (
+    let fragment1 = FragmentShader (fun (output: output) -> Location 0 (
         let metersPerPixel = 1f / 500f
         let fl = 4f
         let cameraOrigin = vec3(0f, 0f, -fl)
@@ -198,7 +201,18 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             // vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
             vec4(0f)
     ))
-    let fragment = FragmentShader (fun (output: output) -> Location 0 (
+    let getDistance (point: vec3f) =
+        let mutable minDistance = 10000f
+        let mutable index = 0
+        // let shapePoint = shapePosition shapes[0] 
+        while index < 1000 && minDistance > 0.01f do
+            let shape = shapes[index]
+            index <- index + 1
+            let distance = shapeDistance shape point
+            minDistance <- min(minDistance, distance)
+        minDistance
+        // length(shapePoint - point) - 1f
+    let fragment2 = FragmentShader (fun (output: output) -> Location 0 (
         // vec4((1f + output.xy.x) * 0.5f, (1f + output.xy.y) * 0.5f, 0f, 0f)
         let metersPerPixel = 1f / 500f
         let fl = 4f
@@ -210,29 +224,100 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
         // let sphere = vec3(screen.posX, screen.posY, 4f)
         // let mutable distance = length(sphere - pixelPosition) - 1f
         let dir = normalize(pixelPosition - cameraOrigin)
+        let shape = shapes[0]
+        let shapePos = vec3(0f, 0f, 4f)
         let mutable pos = pixelPosition
-        let mutable distance = getDistance pos
-        while distance.w > 0.01f && distance.w < 100f do
-            pos <- pos + (dir * distance.w)
+        let mutable distance = distanceSphere shapePos 1f pos
+        // let mutable distance = getDistance pos
+        let mutable iterations = 0
+        // let mutable distance = length()
+        while iterations < 100 && distance > 0.01f && distance < 100f do
+            iterations <- iterations + 1
+            pos <- pos + (dir * distance)
             // distance <- length(sphere - pos) - 1f
-            distance <- getDistance pos
+            // distance <- getDistance pos
+            distance <- distanceSphere shapePos 1f pos
         // pos <- pos + (dir * distance.w)
         // distance <- getDistance pos
-        if distance.w <= 0.001f then
+        if distance <= 0.001f then
             // let n = sphereNormal sphere 1f pos
-            let n = vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f)
+            // let n = vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f)
             // let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
-            let color = (n + vec3(1f, 1f, 1f)) / 2f
-            let color2 = vec3(output.xy.x, output.xy.y, 0f)
+            // let color = (n + vec3(1f, 1f, 1f)) / 2f
+            // let color2 = vec3(output.xy.x, output.xy.y, 0f)
             // let color = vec3(0f, abs(distance.y), abs(distance.z))
             // let color = n
             // let color = n
             // vec4(distance.x, distance.y, distance.z, 1f)
             // vec4(color, 1f)
-            vec4(1f, 1f, 1f, 0f)
+            vec4(1f, 1f, 1f, 1f)
             // vec4(1f, 1f, 1f, 1f)
         else
             // vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
+            vec4(0f)
+    ))
+    let nearestObject (pos: vec3f) =
+        let mutable index = 0
+        let mutable result = 0
+        let mutable minDistance = 10000f
+        while index < 1000 do
+            let distance = shapeDistance shapes[index] pos
+            if distance < minDistance then
+                result <- index
+                minDistance <- distance
+            index <- index + 1
+        shapes[index]
+    let fragment = FragmentShader (fun (output: output) -> Location 0 (
+        let metersPerPixel = 1f / 500f
+        let fl = 4f
+        let cameraOrigin = vec3(0f, 0f, -fl)
+        let pixelPosition = vec3(
+            output.xy.x * metersPerPixel * screen.width,
+            output.xy.y * metersPerPixel * screen.height, 
+            0f)
+        let hitDistance = 0.001f
+        // let sphere = shapePosition shapes[0]
+        // let sphere = vec3(screen.posX, screen.posY, 4f)
+        // let mutable distance = length(sphere - pixelPosition) - 1f
+        let dir = normalize(pixelPosition - cameraOrigin)
+        let mutable pos = pixelPosition
+        // let mutable distance = length (sphere - pos) - 1f
+        // let mutable distance = sdfRoundedBox sphere 1f 0.4f pos
+        let mutable iterations = 0
+        let maxIterations = 1000
+        let mutable distance = getDistance pos
+        let mutable lastDistance = distance
+        let mutable stepsDistanceIncreased = 0
+        while iterations < maxIterations && distance > hitDistance && distance < 100f && stepsDistanceIncreased < 100 do
+            pos <- pos + (dir * distance)
+            iterations <- iterations + 1
+            // distance <- sdfRoundedBox sphere 1f 0.4f pos
+            // distance <- length(sphere - pos) - 1f
+            distance <- getDistance pos
+            if distance < lastDistance then
+                stepsDistanceIncreased <- stepsDistanceIncreased + 1
+            lastDistance <- distance
+        pos <- pos + (dir * distance)
+        // distance <- length(sphere - pos) - 1f
+        // distance <- sdfRoundedBox sphere 1f 0.4f pos
+        // distance <- getDistance pos
+        if distance <= hitDistance then
+            // let n = sphereNormal sphere 1f pos
+            // let n = normalForRoundedBox sphere 1f 0.4f pos
+            let n = shapeNormal (nearestObject pos) pos
+            // let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
+            let color = (n + vec3(1f, 1f, 1f)) / 2f
+            // let color = n
+            // let color = vec3(0f, abs(distance.y), abs(distance.z))
+            // let color = n
+            // let color = n
+            // vec4(distance.x, distance.y, distance.z, 1f)
+            // vec4(float32 iterations / float32 maxIterations, color.y, color.x, 1f)
+            vec4(color, 1f)
+            // vec4(1f, 1f, 1f, 1f)
+        else
+            // vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
+            // vec4(float32 iterations / float32 maxIterations, 0f, 0f, 0f)
             vec4(0f)
     ))
     vertex, fragment

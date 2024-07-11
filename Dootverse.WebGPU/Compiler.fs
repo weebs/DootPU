@@ -92,6 +92,7 @@ module rec Print =
     let call (callee: string) (args: WgslExpr list) =
         match callee with
         | "ToInt" -> $"i32({expr args[0]})"
+        | "ToSingle" -> $"f32({expr args[0]})"
         | "GetArray" -> $"{expr args[0]}[{expr args[1]}]"
         | "op_UnaryNegation" -> $"-{expr args[0]}"
         | "op_Multiply" -> $"({expr args[0]} * {expr args[1]})"

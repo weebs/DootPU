@@ -15,7 +15,8 @@ module Demo =
 
 let gridSize = 22
 let memSize = uint64 (gridSize * gridSize * 4 * sizeof<float32>)
-let shapesBufferSize = 100 * 6 * 4
+let numShapes = 1000
+let shapesBufferSize = numShapes * 6 * 4
 
 let shapes = [|
     for i in 1..(gridSize * gridSize) do
@@ -134,7 +135,8 @@ let onWindowLoad () =
             |]
         let (screen, binds) = Wgpu.Bind binds { isUniform = true; size = 5 * 4 } serializeScreen
         // let (circles, binds) = Wgpu.Bind binds { isUniform = true; size = 4 * 10 } (fun _ -> [||])
-        let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = int memSize } serializeShape
+        // let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = int memSize } serializeShape
+        let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = shapesBufferSize } serializeShape
         let group = wgpu.InitBindings device binds
         screenVar <- screen
         shapesVariable <- shapes
@@ -305,11 +307,18 @@ let onWindowRender t =
         })
         // wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
         shapesVariable.Write (wgpu, queue, 0uL, [|
-            for i in 1..100 do
-                let position = Wgsl.Wgsl.vec3(posX + float32 i, 0f, 10f)
+            for i in 0..numShapes - 1 do
+                // let position = Wgsl.Wgsl.vec3(posX + float32 i, 0f, 4f)
                 // let position = Wgsl.Wgsl.vec3(posX + float32 i, posY + float32 i, 10f)
-                // let position = Wgsl.Wgsl.vec3(-17f + posX + float32 i, MathF.Cos((float32 i * 0.2f) + float32 time) * 2.48f, 10f)
-                let size = 0.42f
+                // let position = Wgsl.Wgsl.vec3(
+                //     -17f + posX + float32 i,
+                //     MathF.Cos((float32 i * 0.2f) + float32 time) * 2.48f,
+                //     10f)
+                let position = Wgsl.Wgsl.vec3(
+                    MathF.Sin((float32 i * 0.2f) + float32 time) * 10.48f,
+                    float32 i - 10f,
+                    MathF.Cos((float32 i * 0.2f) + float32 time) * 10.48f + 20f)
+                let size = 0.25f
                 let tag = i % 3
                 if tag = 0 then Shaders.Sphere (position, size)
                 elif tag = 1 then Shaders.Cube (position, size)
