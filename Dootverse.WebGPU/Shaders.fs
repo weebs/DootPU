@@ -125,7 +125,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
         let mutable minDistance = 1000000f
         let mutable index = 0
         let mutable normalValue = vec3(0f)
-        while index < 100 do
+        while index < 100 && minDistance > 0.01f do
             let shape = shapes[index]
             index <- index + 1
             let distance = shapeDistance shape point
@@ -223,11 +223,13 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[]) ->
             let n = vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f)
             // let n = abs(vec3(distance.x * 0.01f, distance.y, distance.z * 0.1f))
             let color = (n + vec3(1f, 1f, 1f)) / 2f
+            let color2 = vec3(output.xy.x, output.xy.y, 0f)
             // let color = vec3(0f, abs(distance.y), abs(distance.z))
             // let color = n
             // let color = n
             // vec4(distance.x, distance.y, distance.z, 1f)
-            vec4(color, 1f)
+            // vec4(color, 1f)
+            vec4(1f, 1f, 1f, 0f)
             // vec4(1f, 1f, 1f, 1f)
         else
             // vec4(sqrt(output.xy.x), sqrt(output.xy.y), 0f, 0f)
