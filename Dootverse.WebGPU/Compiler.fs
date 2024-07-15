@@ -328,7 +328,10 @@ and translateWgslValue t this_ offset =
     else
         failwith ""
 and sizeofType (t: Type) =
-    if t = typeof<vec3<float32>> then 3
+    if FSharpType.IsRecord t then
+        let fields = FSharpType.GetRecordFields t
+        fields |> Array.map (_.PropertyType >> sizeofType) |> Array.sum
+    elif t = typeof<vec3<float32>> then 3
     else 1
 and (|UnionLet|_|) e =
     match e with

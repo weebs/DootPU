@@ -29,6 +29,83 @@ type DotnetBuffer =
         info: BufferInfo
     }
     
+[<AutoOpen>]
+module PollExtensions =
+    type PollDelegate = delegate of nativeptr<Device> * bool * nativeint -> bool
+    let mutable poll = None
+    type WebGPU with
+        member inline this.DevicePoll(device, wait, userData) =
+            if poll.IsNone then
+                let found, ptr = this.Context.TryGetProcAddress("wgpuDevicePoll")
+                poll <- Some (System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<PollDelegate> ptr)
+            poll.Value.Invoke(device, wait, userData)
+        member inline this.DevicePoll(device, wait) =
+            this.DevicePoll(device, wait, Unchecked.defaultof<_>)
+        member inline this.CreateInstance(?desc) =
+            let descriptor = desc |> Option.defaultValue (InstanceDescriptor())
+            this.CreateInstance(&descriptor)
+        member inline this.RequestDeviceAsync(adapter, ?request) =
+            let request = request |> Option.defaultValue (DeviceDescriptor())
+            let promise = TaskCompletionSource<_>()
+            let callback = new PfnRequestDeviceCallback(RequestDeviceCallback(fun _ device _ _ ->
+                promise.TrySetResult device |> ignore))
+            task {
+                this.AdapterRequestDevice(adapter, &request, callback, Unchecked.defaultof<_>)
+                let! result = promise.Task
+                callback.Dispose()
+                return result
+            }
+        member inline this.RequestAdapterAsync(instance, ?request: RequestAdapterOptions) =
+            let request = request |> Option.defaultValue (RequestAdapterOptions())
+            let promise = TaskCompletionSource<_>()
+            let callback = new PfnRequestAdapterCallback(RequestAdapterCallback(fun _ a _ _ ->
+                promise.TrySetResult a |> ignore))
+            task {
+                this.InstanceRequestAdapter(instance, &request, callback, Unchecked.defaultof<_>)
+                let! result = promise.Task
+                callback.Dispose()
+                return result
+            }
+        member inline this.EncoderBeginComputePass(encoder, ?desc: ComputePassDescriptor) =
+            let value = desc |> Option.defaultValue (ComputePassDescriptor())
+            this.CommandEncoderBeginComputePass(encoder, &value)
+        member inline this.CreateCommandEncoder(device, ?desc) =
+            let mutable value = desc |> Option.defaultValue (CommandEncoderDescriptor())
+            this.DeviceCreateCommandEncoder(device, &&value)
+    
+[<AutoOpen>]
+module rec Wrappers =
+    type WebGPU'(wgpu: WebGPU) as this =
+        inherit WebGPU(wgpu.Context)
+        let instance = wgpu.CreateInstance()
+        let adapter = wgpu.RequestAdapterAsync(instance).Result
+        let device = Device'(this, wgpu.RequestDeviceAsync(adapter).Result)
+        member this.Device = device
+        interface System.IDisposable with
+            member this.Dispose() =
+                wgpu.DeviceRelease device.Device
+                wgpu.AdapterRelease adapter
+                wgpu.InstanceRelease instance
+    type Queue'(wgpu: WebGPU') = class end
+    type CommandEncoder'(wgpu: WebGPU', encoder) =
+        member this.BeginComputePass (?d: ComputePassDescriptor) =
+            ComputePassEncoder'(wgpu, wgpu.EncoderBeginComputePass(encoder, ?desc=d))
+        member this.Encoder = encoder
+    type ComputePassEncoder'(wgpu: WebGPU', encoder) =
+        member this.SetPipeline pipeline = wgpu.ComputePassEncoderSetPipeline (encoder, pipeline)
+        member this.SetBindGroup group index =
+            wgpu.ComputePassEncoderSetBindGroup(encoder, index, group, unativeint 0, Unchecked.defaultof<nativeptr<_>>)
+        member this.DispatchWorkgroups x y z =
+            wgpu.ComputePassEncoderDispatchWorkgroups(encoder, x, y, z)
+        member this.End () = wgpu.ComputePassEncoderEnd encoder
+        member this.Encoder = encoder
+        
+    type Device'(wgpu: WebGPU', device: nativeptr<Device>) =
+        member this.GetQueue () = wgpu.DeviceGetQueue device
+        member this.CreateCommandEncoder () = CommandEncoder'(wgpu, wgpu.CreateCommandEncoder device)
+        member this.Device = device
+        member this.Wgpu = wgpu
+    
 // type 't with todo Extensions to types with a reference to themselves, ie: serializeWith
 //     member this.Foo = ()
 
@@ -107,6 +184,30 @@ type ShaderMap<'t when 't: unmanaged>(wgpu: WebGPU, device: nativeptr<Device>, b
             let result = wgpu.BufferGetMappedRange(stagingBuffer, unativeint 0, unativeint size)
             return result |> NativePtr.ofVoidPtr<'t>
         }
+    member this.ReadBufferRange (wgpu: WebGPU', offset, readCount) =
+        task {
+            let promise = TaskCompletionSource<_>()
+            let callback = new PfnBufferMapCallback(fun _ _ ->
+                ignore <| promise.TrySetResult ()
+            )
+            let readSize = readCount * 4
+            wgpu.BufferMapAsync(stagingBuffer, MapMode.Read, unativeint offset, unativeint readSize, callback, Unchecked.defaultof<_>)
+            wgpu.DevicePoll(wgpu.Device.Device, true) |> ignore
+            do! promise.Task
+            callback.Dispose()
+            let result =
+                wgpu.BufferGetMappedRange(
+                    stagingBuffer,
+                    unativeint offset,
+                    unativeint readSize)
+                |> NativePtr.ofVoidPtr<'t>
+            let item0 = NativePtr.read result
+            let array = Array.zeroCreate readCount
+            let ptr = fixed array // todo use doesn't work here
+            // todo : use deserialization instead of copyBlock ?
+            NativePtr.copyBlock ptr result readCount
+            return array
+        }
     member this.Buffer = buffer.Value
 type W = { wgpu: WebGPU } // todo
 type Dev = { device: Device; wgpu: W } // todo
@@ -120,7 +221,7 @@ type Wgpu =
         ShaderBuffer<'t3>(bindings.Buffer, int info.size, serializer), bindings.Rest info
     static member Bind(bindings: ShaderBinder<'t4[], 't3, 't2, 't1>) = fun info -> fun serializer ->
         ShaderBuffer<'t4>(bindings.Buffer, int info.size, serializer), bindings.Rest info
-    static member MapS(binding: ShaderBinder<'t[]>) = fun wgpu device info -> fun serializer ->
+    static member Map(binding: ShaderBinder<'t[]>) = fun wgpu device info -> fun serializer ->
         ShaderMap<'t>(wgpu, device, binding.Buffer, int info.size, serializer), binding.BufferRefs info
     static member Map(bindings: ShaderBinder<'t2[], 't1>) = fun wgpu device info -> fun serializer ->
         ShaderMap<'t2>(wgpu, device, bindings.Buffer, int info.size, serializer), bindings.Rest info
@@ -135,7 +236,7 @@ module WebGPUBindExtensions =
     // let inline takesList<'t, 'a when 'a: (member value: 't option)> (value: {| value: 't option; cons: 'a |}) =
     //     ()
     type Wgpu with
-        static member BindS(binding: ShaderBinder<'t>) = fun info serializer ->
+        static member Bind(binding: ShaderBinder<'t>) = fun info serializer ->
             ShaderVariable<'t>(binding.Buffer, serializer), binding.BufferRefs info
         static member Bind(binding: ShaderBinder<'t2, 't1>) = fun info serializer ->
             ShaderVariable<'t2>(binding.Buffer, serializer), binding.Rest info
@@ -143,7 +244,7 @@ module WebGPUBindExtensions =
             ShaderVariable<'t3>(binding.Buffer, serializer), binding.Rest info
         static member Bind(binding: ShaderBinder<'t4, 't3, 't2, 't1>) = fun info serializer ->
             ShaderVariable<'t4>(binding.Buffer, serializer), binding.Rest info
-        static member MapS(binding: ShaderBinder<'t>) = fun info -> fun serializer ->
+        static member Map(binding: ShaderBinder<'t>) = fun info -> fun serializer ->
             ShaderMapVar<'t>(binding.Buffer, serializer), binding.BufferRefs info
         static member Map(bindings: ShaderBinder<'t2, 't1>) = fun info -> fun serializer ->
             ShaderMapVar<'t2>(bindings.Buffer, serializer), bindings.Rest info
@@ -151,43 +252,20 @@ module WebGPUBindExtensions =
             ShaderMapVar<'t3>(bindings.Buffer, serializer), bindings.Rest info
         static member Map(bindings: ShaderBinder<'t4, 't3, 't2, 't1>) = fun info -> fun serializer ->
             ShaderMapVar<'t4>(bindings.Buffer, serializer), bindings.Rest info
+[<AutoOpen>]
+module WebGPUBindExtensions2 =
+    // let inline takesList<'t, 'a when 'a: (member value: 't option)> (value: {| value: 't option; cons: 'a |}) =
+    //     ()
+    type Wgpu with
+        static member Bind(binding: ShaderBinder<'t>) = fun info serializer ->
+            ShaderVariable<'t>(binding.Buffer, serializer), binding.BufferRefs info
             
 
 [<AutoOpen>]
 module Extensions =
-    type PollDelegate = delegate of nativeptr<Device> * bool * nativeint -> bool
-    let mutable poll = None
     type WebGPU with
-        member inline this.DevicePoll(device, wait, userData) =
-            if poll.IsNone then
-                let found, ptr = this.Context.TryGetProcAddress("wgpuDevicePoll")
-                poll <- Some (System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<PollDelegate> ptr)
-            poll.Value.Invoke(device, wait, userData)
-        member inline this.RequestDeviceAsync(adapter, ?request) =
-            let request = request |> Option.defaultValue (DeviceDescriptor())
-            let promise = TaskCompletionSource<_>()
-            let callback = new PfnRequestDeviceCallback(RequestDeviceCallback(fun _ device _ _ ->
-                promise.TrySetResult device |> ignore))
-            task {
-                this.AdapterRequestDevice(adapter, &request, callback, Unchecked.defaultof<_>)
-                let! result = promise.Task
-                callback.Dispose()
-                return result
-            }
-        member inline this.CreateInstance(?desc) =
-            let descriptor = desc |> Option.defaultValue (InstanceDescriptor())
-            this.CreateInstance(&descriptor)
-        member inline this.RequestAdapterAsync(instance, ?request: RequestAdapterOptions) =
-            let request = request |> Option.defaultValue (RequestAdapterOptions())
-            let promise = TaskCompletionSource<_>()
-            let callback = new PfnRequestAdapterCallback(RequestAdapterCallback(fun _ a _ _ ->
-                promise.TrySetResult a |> ignore))
-            task {
-                this.InstanceRequestAdapter(instance, &request, callback, Unchecked.defaultof<_>)
-                let! result = promise.Task
-                callback.Dispose()
-                return result
-            }
+        member inline this.DevicePoll(device, wait) =
+            this.DevicePoll(device, wait, Unchecked.defaultof<_>)
         member inline this.CreateBuffer(device, desc) =
             let mutable value = desc
             this.DeviceCreateBuffer(device, &&value)
@@ -229,12 +307,6 @@ module Extensions =
             [| for descriptor in entries do
                 this.CreateBuffer(device, descriptor) |]
             
-        member inline this.CreateCommandEncoder(device, ?desc) =
-            let mutable value = desc |> Option.defaultValue (CommandEncoderDescriptor())
-            this.DeviceCreateCommandEncoder(device, &&value)
-        member inline this.EncoderBeginComputePass(encoder, ?desc: ComputePassDescriptor) =
-            let value = desc |> Option.defaultValue (ComputePassDescriptor())
-            this.CommandEncoderBeginComputePass(encoder, &value)
         member inline this.CreateBindGroupEntries(entries: BufferDescriptor[], buffers: _ []) =
             [|
                 for i in 0..buffers.Length - 1 do
@@ -370,13 +442,33 @@ module Extensions =
             // this.QueueSubmit // todo
             // this.BufferMapAsync // todo (use the ShaderMapVar / ShaderMap type)
             ()
-        
-// [<AutoOpen>]        
-// module MoreExtensions =
-//     type WebGPU with
-//         member this.CreateBinder (shader: Quotations.Expr<'a -> _>) =
-//             ShaderBinder<'a, 'b>([])
-            
-            
-            
-namespace Dootverse.WebGPU
+    type Device' with
+        member this.CreateCompute shader entryPoint binds =
+            this.Wgpu.CreateCompute shader entryPoint this.Device binds
+    type ComputePipeline(device: Device', code, functionName, binds) =
+        // class end
+        member this.Begin(x, y, z) = fun fnEncoder fn ->
+            let group = device.CreateCompute code functionName binds
+            let encoder = device.CreateCommandEncoder()
+            let computePassEncoder = encoder.BeginComputePass()
+            computePassEncoder.SetPipeline group.pipeline
+            computePassEncoder.SetBindGroup group.bindGroup 0u
+            computePassEncoder.DispatchWorkgroups x y z
+            computePassEncoder.End ()
+            // todo
+            // output.AddCopy (wgpu, encoder.Encoder)
+            fnEncoder encoder.Encoder
+            let mutable commandBuffer = device.Wgpu.EncoderFinish(encoder.Encoder) // todo
+            let queue = device.Wgpu.DeviceGetQueue(device.Device)
+            fn queue
+            device.Wgpu.QueueSubmit(queue, unativeint 1, &&commandBuffer)
+            // device.Wgpu.QueueRelease(queue)
+            // device.Wgpu.CommandBufferRelease(commandBuffer)
+            // device.Wgpu.ComputePassEncoderRelease(computePassEncoder.Encoder)
+            // device.Wgpu.CommandEncoderRelease(encoder.Encoder);
+        interface System.IDisposable with
+            member this.Dispose() =
+                // device.Wgpu.BindGroupRelease(group.bindGroup);
+                // device.Wgpu.BindGroupLayoutRelease(group.bindGroupLayout);
+                // device.Wgpu.ComputePipelineRelease(group.pipeline)
+                ()
