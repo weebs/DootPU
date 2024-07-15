@@ -92,6 +92,7 @@ let onWindowLoad () =
     input.Mice |> Seq.iter (fun m -> m.add_MouseDown onMouseDown)
     input.Mice |> Seq.iter (fun m -> m.add_MouseUp onMouseDown)
     wgpu <- WebGPU.GetApi ()
+    let wgpu' = new WebGPU'(wgpu)
     let descriptor = InstanceDescriptor()
     nativeInstance <- wgpu.CreateInstance(&descriptor)
     surface <- window.CreateWebGPUSurface(wgpu, nativeInstance)
@@ -123,8 +124,8 @@ let onWindowLoad () =
         //         yield! BitConverter.GetBytes value.width
         //         yield! BitConverter.GetBytes value.height
         //     |]
-        let serializeScreen = Shaders.makeSerialize<Shaders.Screen>()
-        let binds = wgpu.CreateBinder Shaders.shader'
+        let serializeScreen = Compiler.makeSerialize<Shaders.Screen>()
+        let binds = wgpu'.CreateBinder Shaders.shader'
         let serializeShape (shape: Shaders.Shape) =
             let code, vec3, f, a =
                 match shape with
@@ -141,19 +142,19 @@ let onWindowLoad () =
             |]
         let serializeVoxel (voxel: Shaders.Voxel) =
             [| yield! BitConverter.GetBytes voxel.startIndex; yield! BitConverter.GetBytes voxel.count |]
-        let (screen, binds) = Wgpu.Bind binds { usage = BufferUsage.CopyDst; isUniform = true; size = Shaders.sizeofWgslType<Shaders.Screen> () } serializeScreen
+        let (screen, binds') = Wgpu.BindI (binds, { usage = BufferUsage.CopyDst; isUniform = true; size = Shaders.sizeofWgslType<Shaders.Screen> () }, serializeScreen)
         // let (circles, binds) = Wgpu.Bind binds { isUniform = true; size = 4 * 10 } (fun _ -> [||])
         // let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = int memSize } serializeShape
         let voxelGridSize = 100
-        let (shapes, binds) = Wgpu.Bind binds { usage = BufferUsage.CopyDst; isUniform = false; size = shapesBufferSize } serializeShape
-        let (voxels_, binds) =
-            Wgpu.Bind binds {
+        let (shapes, binds'') = Wgpu.BindI (binds', { usage = BufferUsage.CopyDst; isUniform = false; size = shapesBufferSize }, serializeShape)
+        let (voxels_, binds''') =
+            Wgpu.BindI (binds'', {
                 isUniform = false
                 usage = BufferUsage.CopyDst
                 size = Shaders.sizeofWgslType<Shaders.Voxel> () * (voxelGridSize * voxelGridSize * voxelGridSize)
-            } serializeVoxel
-        let (shapeIndexes_, binds) = Wgpu.Bind binds { usage = BufferUsage.CopyDst; isUniform = false; size = 108000 } BitConverter.GetBytes
-        let group = wgpu.InitBindings device binds
+            }, serializeVoxel)
+        let (shapeIndexes_, binds'''') = Wgpu.BindI (binds''', { usage = BufferUsage.CopyDst; isUniform = false; size = 108000 })
+        let group = wgpu.InitBindings device binds''''.Buffers
         
         voxels <- voxels_
         shapeIndexes <- shapeIndexes_

@@ -1,5 +1,6 @@
 ﻿module Dootverse.WebGPU.Compiler
 
+open System.Diagnostics
 open Microsoft.FSharp.Quotations
 open type Quotations.Expr
 open System
@@ -333,6 +334,34 @@ and sizeofType (t: Type) =
         fields |> Array.map (_.PropertyType >> sizeofType) |> Array.sum
     elif t = typeof<vec3<float32>> then 3
     else 1
+and serializeObj (o: obj) =
+    match o with
+    | :? int as i -> BitConverter.GetBytes i
+    | :? uint as u -> BitConverter.GetBytes u
+    | :? single as s -> BitConverter.GetBytes s
+    // | o when FSharpType.IsRecord (o.GetType()) ->
+        // let fields = 
+    // | :? double as f -> BitConverter.GetBytes f
+    | _ -> Debugger.Break(); failwith ""
+// let makeSerialize<'t> (t: System.Type) =
+and makeSerialize<'t> () =
+    let t = typeof<'t>
+    if FSharpType.IsRecord t then
+        let fields = FSharpType.GetRecordFields t
+        fun (o: 't) -> [|
+            for field in fields do
+                let value = field.GetValue(o)
+                yield! serializeObj value
+        |]
+    elif t = typeof<int32> then
+        fun (i: 't) -> BitConverter.GetBytes (box i :?> int32)
+    elif t = typeof<float32> then
+        fun (i: 't) -> BitConverter.GetBytes (box i :?> float32)
+    elif t = typeof<uint> then
+        fun (i: 't) -> BitConverter.GetBytes (box i :?> uint)
+    else
+        Debugger.Break()
+        failwith ""
 and (|UnionLet|_|) e =
     match e with
     | Patterns.Let (variable, Patterns.PropertyGet (Some this, prop, args), rest) ->
