@@ -1,5 +1,6 @@
 ﻿module Dootverse.WebGPU.Compiler
 
+open Microsoft.FSharp.Quotations
 open type Quotations.Expr
 open System
 open System.Numerics
@@ -59,19 +60,20 @@ type WgslStatement =
     | VarDeclaration of name: string * value: WgslExpr option
     | LetDeclaration of name: string * value: WgslExpr
     | IfThenElse of cond: WgslExpr * whenTrue: WgslStatement list * whenFalse: WgslStatement list
-    | Assign of var: string * value: WgslExpr
+    | Assign of var: WgslExpr * value: WgslExpr
     | ReturnExpr of expr: WgslExpr
 type WgslAttr = string
 type WgslModuleStatement =
     | Struct of WgslStruct
     | Alias
     | ModuleVar of binding: (int * int) option * name: string * types: string list * varType: WgslType
-    | Function of name: string * args: (string * WgslType) list * attrs: WgslAttr list * returning: WgslType option * statements: WgslStatement list
+    | Function of name: string * args: (string * WgslType * string list) list * attrs: WgslAttr list * returning: WgslType option * statements: WgslStatement list
 type WgslFunc = {
     name: string
-    args: (string * WgslType) list
+    args: (string * WgslType * string list) list
     attrs: WgslAttr list
     returnType: WgslType option
+    returnAttr: string option
     fn: WgslStatement list
 }
 type WgslModuleVar = {
@@ -94,6 +96,7 @@ module rec Print =
         | "ToInt" -> $"i32({expr args[0]})"
         | "ToSingle" -> $"f32({expr args[0]})"
         | "GetArray" -> $"{expr args[0]}[{expr args[1]}]"
+        | "SetArray" -> $"{expr args[0]}[{expr args[1]}] = {expr args[2]}"
         | "op_UnaryNegation" -> $"-{expr args[0]}"
         | "op_Multiply" -> $"({expr args[0]} * {expr args[1]})"
         | "op_Addition" -> $"({expr args[0]} + {expr args[1]})"
@@ -101,7 +104,9 @@ module rec Print =
         | "op_Subtraction" -> $"({expr args[0]} - {expr args[1]})"
         | "op_GreaterThan" -> $"({expr args[0]} > {expr args[1]})"
         | "op_GreaterThanOrEqual" -> $"({expr args[0]} >= {expr args[1]})"
-        | "op_Equals" -> $"({expr args[0]} = {expr args[1]})"
+        | "op_Equals" -> $"({expr args[0]} == {expr args[1]})"
+        | "op_Equality" -> $"({expr args[0]} == {expr args[1]})"
+        | "op_Inequality" -> $"({expr args[0]} != {expr args[1]})"
         | "op_LessThan" -> $"({expr args[0]} < {expr args[1]})"
         | "op_LessThanOrEqual" -> $"({expr args[0]} <= {expr args[1]})"
         | _ ->
@@ -141,7 +146,8 @@ module rec Print =
         | LetDeclaration(name, (Array _ as value)) ->
             [ $"var {name} = {expr value};" ]
         | LetDeclaration(name, value) ->
-            [ $"let {name} = {expr value};" ]
+            // [ $"let {name} = {expr value};" ]
+            [ $"var {name} = {expr value};" ]
         | IfThenElse(cond, whenTrue, whenFalse) ->
             [
                 $"if ({expr cond}) {{"
@@ -150,7 +156,7 @@ module rec Print =
                 yield! List.map statement whenFalse |> List.collect id
                 "}"
             ]
-        | Assign(var, value) -> [ $"{var} = {expr value};" ]
+        | Assign(var, value) -> [ $"{expr var} = {expr value};" ]
         | ReturnExpr e -> [ $"return {expr e};" ]
     let type' (t: WgslType) =
         match t with
@@ -194,11 +200,14 @@ module rec Print =
             | Function(name, args, attrs, returning, statements) ->
                 let argsList =
                     args 
-                    |> List.map (fun (name, t) ->
-                        $"{name}: {type' t}")
+                    |> List.map (fun (name, t, attrs) ->
+                        let attr_str =
+                            if attrs.Length = 0 then "" else (attrs |> String.concat " ") + " "
+                        $"{attr_str}{name}: {type' t}")
                     |> String.concat ", "
                 items.Add [
-                    if attrs.Length = 1 then $"@{attrs[0]}"
+                    if attrs.Length <> 0 then
+                        attrs |> List.map string |> String.concat " "
                     $"fn {name}({argsList})" + (match returning with None -> "" | Some t -> " -> " + type' t) + " {"
                     yield! List.map Print.statement statements |> List.collect id
                     "}"
@@ -227,7 +236,7 @@ let rec function' (expr: Quotations.Expr)
             let statements = translateStatement e
             let rt_string = Print.type' (toType e.Type)
             acc, statements, DefinedType $"@location({o}) {rt_string}"
-        | Patterns.Lambda (v, e) -> parse ((v.Name, toType v.Type) :: acc) e
+        | Patterns.Lambda (v, e) -> parse ((v.Name, toType v.Type, [(* todo attributes *)]) :: acc) e
         | Patterns.Call (_, method, [ Patterns.NewUnionCase (info, _)
                                       Patterns.Lambda (v, e) ])
             when method.Name = "BuiltIn" ->
@@ -235,7 +244,7 @@ let rec function' (expr: Quotations.Expr)
                 match info.Name with
                 | "VertexIndex" -> "@builtin(vertex_index) "
                 | _ -> ""
-            parse ((builtin + v.Name, toType v.Type) :: acc) e
+            parse ((builtin + v.Name, toType v.Type, [(* todo attributes *)]) :: acc) e
         | e ->
             // let args = List.rev acc |> List.map (fun v -> v.Name, toType v.Type)
             let body = translateStatement e
@@ -278,6 +287,7 @@ and translateExpr (expr: Quotations.Expr) =
         match o with
         | :? int32 as i -> Value (Int i)
         | :? float32 as f -> Value (Float f)
+        | :? string as s -> Value (Unsigned 4205731365u)
         | _ -> failwith $"translateExpr: Cannot translate value {o}"
     | Patterns.Application (callee, arg) ->
         call callee arg
@@ -296,6 +306,10 @@ and translateExpr (expr: Quotations.Expr) =
             failwith $""
     | Patterns.Call (thisArg, methodInfo, args) ->
         Call (methodInfo.Name, List.map translateExpr args)
+    | Patterns.FieldGet (Some (Patterns.Var v), info) when v.Name = "this" ->
+        Ident info.Name
+    | Patterns.DefaultValue t ->
+        Ident $"default<{Print.type' (toType t)}>"
     | _ -> failwith $"Unrecognized pattern in translateExpr: {expr}"
 and translateWgslValue t this_ offset =
     if t = typeof<vec3<float32>> then
@@ -414,6 +428,8 @@ and translateStatement (statement: Quotations.Expr) =
         let result = loop acc
         // ((), [ 1; 2; 3; 4; 5 ]) ||> List.fold (fun _ value -> printfn $"{value}")
         result
+    | Patterns.PropertySet (Some o, prop, args, value) ->
+        [ Assign (PropGet(translateExpr o, prop.Name), translateExpr value) ]
     // | Patterns.Application (callee, arg) -> []
     | Patterns.Let (variable, value, e) ->
         match value with
@@ -468,7 +484,7 @@ and translateStatement (statement: Quotations.Expr) =
     | Patterns.Sequential (e, e') ->
         translateStatement e @ translateStatement e'
     | Patterns.VarSet (var, value) ->
-        [ Assign (var.Name, translateExpr value) ]
+        [ Assign (Ident var.Name, translateExpr value) ]
     | Patterns.Value (null, t) when t = typeof<unit> -> []
     | e -> [ ExprStatement (translateExpr e) ]
 and getLambdaExprReturn e =
@@ -480,6 +496,13 @@ and parseVarTypes (expr: Quotations.Expr) =
         function
         | "ReadWrite" -> "read_write"
         | s -> s.ToLower()
+    let quote = <@
+        let (|Foo|) (a, b: int) = if a % 2 = 0 then 0, 2 else 1, 2
+        let doot (Foo (value, b)) = ()
+        match 1234, 2 with
+        | Foo (a, b) -> a
+        | _ -> 0
+    @>
     let rec loop e acc =
         match e with
         | Patterns.NewUnionCase (info, [ Patterns.NewUnionCase (t, _); value2 ]) when info.Name = "Cons" ->
@@ -525,6 +548,7 @@ and translateModuleItem (item: Quotations.Expr) (module_: Module) =
         { module_ with
             fns = module_.fns.Add(v.Name, {
                 name = v.Name
+                returnAttr = None 
                 args = args
                 attrs = []; returnType = rt
                 fn = addReturn abs
@@ -547,6 +571,7 @@ and translateModuleItem (item: Quotations.Expr) (module_: Module) =
         { module_ with
             fns = module_.fns.Add(v.Name, {
                 name = v.Name
+                returnAttr = None 
                 args = args
                 attrs = [ if method.Name = "VertexShader" then "vertex" else "fragment" ]; 
                 returnType = Some rt
@@ -558,10 +583,10 @@ and translateModuleItem (item: Quotations.Expr) (module_: Module) =
 and translateStruct (t: Type) =
     if FSharpType.IsRecord t then
         let fields = FSharpType.GetRecordFields t
-        t.Name, fields |> Array.map (fun f -> f.Name, toType f.PropertyType)
+        t.Name, fields |> Array.map (fun f -> f.Name, toType f.PropertyType), []
     else
         let fields = t.GetFields()
-        t.Name, fields |> Array.map (fun f -> f.Name, toType f.FieldType)
+        t.Name, fields |> Array.map (fun f -> f.Name, toType f.FieldType), []
     // structsUsedByType t
     
 and requiresDecl (t: Type) =
@@ -612,6 +637,12 @@ and toType (t: System.Type) =
     | t when t = typeof<Wgsl.vec2<float32>> -> WgslType.DefinedType "vec2f"
     | t when t = typeof<Wgsl.vec3<float32>> -> WgslType.DefinedType "vec3f"
     | t when t = typeof<Wgsl.vec4<float32>> -> WgslType.DefinedType "vec4f"
+    | t when t = typeof<Wgsl.vec2<int>> -> WgslType.DefinedType "vec2<i32>"
+    | t when t = typeof<Wgsl.vec3<int>> -> WgslType.DefinedType "vec3<i32>"
+    | t when t = typeof<Wgsl.vec4<int>> -> WgslType.DefinedType "vec4<i32>"
+    | t when t = typeof<Wgsl.vec2<uint>> -> WgslType.DefinedType "vec2<u32>"
+    | t when t = typeof<Wgsl.vec3<uint>> -> WgslType.DefinedType "vec3<u32>"
+    | t when t = typeof<Wgsl.vec4<uint>> -> WgslType.DefinedType "vec4<u32>"
     | t when t.IsArray ->
         let elementType =
             t.GetMethods() |> Array.find (_.Name >> (=) "Get")

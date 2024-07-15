@@ -11,9 +11,9 @@
         <Content Include="raymarching.wgsl" />
         <Compile Include="Wgsl.fs" />
         <Compile Include="Compiler.fs" />
+        <Compile Include="Setup.fs" />
         <Compile Include="Shaders.fs" />
         <Compile Include="RaymchingSphereTest.fs" />
-        <Compile Include="Setup.fs" />
         <Compile Include="WebGPU.fs" />
     </ItemGroup>
 

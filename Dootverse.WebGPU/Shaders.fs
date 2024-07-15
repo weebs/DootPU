@@ -1,9 +1,135 @@
 ﻿module Dootverse.WebGPU.Shaders
 
+open System
+open System.Diagnostics
+open System.Reflection
 open Dootverse.WebGPU.Compiler
 open Dootverse.WebGPU.Wgsl
 open Microsoft.FSharp.Quotations
 open type Dootverse.WebGPU.Wgsl.Wgsl
+open Microsoft.FSharp.Reflection
+open Silk.NET.WebGPU
+
+open System.Reflection
+open Microsoft.FSharp.Reflection
+            
+    // fun (b: 'b) -> ()
+// open Setup
+module Wgpu =
+    let getAttributes (customAttributes: CustomAttributeData seq) =
+        customAttributes |> Seq.choose (fun data ->
+            let c = data.Constructor.Invoke(data.ConstructorArguments |> Seq.map _.Value |> Seq.toArray)
+            match c with
+            | :? Wgsl.WgslAttribute as attr -> Some attr.Serialize
+            | _ -> None
+        ) |> Seq.toList
+    let rec getMethodBody e =
+        match e with
+        | Patterns.Lambda (_, e2) -> getMethodBody e2
+        | _ -> e
+        
+// type Wgpu =
+    // static member BufferForType (t: Type) =
+    //     
+
+type Setup =
+    static let window (wgpu, nativeInstance, surface) = null
+    // static member inline compileModule<'a, 'b when 'b: (new: 'a -> 'b)> (constructor: 'a -> 'b) : Compiler.Module =
+    static let compileMethod (method: MethodInfo) e =
+        let result : Compiler.WgslFunc = {
+            name = method.Name
+            args =
+                method.GetParameters()
+                |> Array.map (fun p ->
+                    let attrs = p.CustomAttributes |> Wgpu.getAttributes
+                    p.Name, Compiler.toType p.ParameterType, attrs)
+                |> Array.toList
+            attrs = Wgpu.getAttributes method.CustomAttributes
+            returnAttr = None
+            returnType =
+                if method.ReturnType = typeof<System.Void> then None
+                else Some (Compiler.toType method.ReturnType)
+            fn =
+                if method.ReturnType <> typeof<System.Void> then
+                    Compiler.translateStatement (Wgpu.getMethodBody e)
+                    |> Compiler.addReturn
+                else
+                    Compiler.translateStatement (Wgpu.getMethodBody e)
+        } in result
+    static member calculateBuffers (t: Type) =
+        let ctor = t.GetConstructors() |> Seq.head
+        let moduleParams = ctor.GetParameters()
+        let moduleParamAttrs =
+            moduleParams
+            |> Array.map (_.CustomAttributes >> Seq.toArray)
+            |> Array.zip moduleParams
+        Map.ofList [
+            let mutable count = 0
+            for (info, attrs) in moduleParamAttrs do
+                info.Name, {
+                    name = info.Name
+                    binding = Some (0, count)
+                    varTypes =
+                        if attrs.Length <> 0 then
+                            attrs |> Array.map string |> Array.toList
+                        else
+                            [ "storage"; "read_write" ]
+                    varType = toType info.ParameterType
+                }
+                count <- count + 1
+        ]
+        // [|
+        //     for i in 0..moduleParams.Length - 1 do
+        //         let p = moduleParams[i]
+        //         {|
+        //             Label = $"{t.Name} Parameter {p.Name}"
+        //             Attributes = moduleParamAttrs
+        //             Binding = 0u
+        //         |}
+        // |]
+    static member compileModule (constructor: 'a -> 'b) : Compiler.Module =
+        let t = typeof<'b>
+        // let a = new 'a()
+        let ctors = typeof<'b>.GetConstructors()
+        let buffers = Setup.calculateBuffers t
+        let ctor = ctors[0]
+        let structs =
+            ctor.GetParameters()
+            |> Array.filter (_.ParameterType >> Compiler.requiresDecl)
+            |> Array.map (fun p ->
+                structsUsedByType p.ParameterType
+                |> Array.map (fun s -> p.Name, s))
+            |> Array.collect id
+            // |> Array.map (fun p -> p.ParameterType.Name, Compiler.translateStruct p.ParameterType)
+        let moduleArgTypes =
+            if FSharpType.IsTuple t then
+                FSharpType.GetTupleElements t
+            else
+                [| t |]
+        let methods = typeof<'b>.GetMethods(BindingFlags.Instance ||| BindingFlags.Public ||| BindingFlags.NonPublic)
+        let methodQuotations =
+            methods
+            |> Array.choose (function
+                | method & DerivedPatterns.MethodWithReflectedDefinition e ->
+                    Some (method.Name, (method, e))
+                | method -> None)
+            |> Map.ofArray
+        let compiled = ResizeArray()
+        for (method, e) in methodQuotations.Values do
+            let result = compileMethod method e
+            compiled.Add result
+        {
+            unfinishedBindings = Map.empty
+            bindings = Setup.calculateBuffers t
+            structs = Map.ofArray structs
+            fns = compiled |> Seq.map (fun fn -> fn.name, fn) |> Map.ofSeq
+        }
+        
+type ComputeShaderInstance() =
+    class end
+    
+type WebGpu(wgpu: WebGPU) =
+    class end
 
 type output = {
     [<BuiltIn(Builtin'.position)>] position: vec4<float32>
@@ -29,27 +155,54 @@ type Raymarching =
         
 type Screen = {
     gridSize: int
+    voxelGridSize: int
+    voxelGridScale: float32
     posX: float32
     posY: float32
     width: float32
     height: float32
 }
-type Voxel = { index: int; count: int }
+let sizeofWgslType<'t> () =
+    if FSharpType.IsRecord typeof<'t> then FSharpType.GetRecordFields typeof<'t> |> _.Length |> (*) 4
+    else Debugger.Break(); failwith ""
+let rec serializeObj (o: obj) =
+    match o with
+    | :? int as i -> BitConverter.GetBytes i
+    | :? uint as u -> BitConverter.GetBytes u
+    | :? single as s -> BitConverter.GetBytes s
+    // | o when FSharpType.IsRecord (o.GetType()) ->
+        // let fields = 
+    // | :? double as f -> BitConverter.GetBytes f
+    | _ -> Debugger.Break(); failwith ""
+// let makeSerialize<'t> (t: System.Type) =
+let makeSerialize<'t> () =
+    let t = typeof<'t>
+    if FSharpType.IsRecord t then
+        let fields = FSharpType.GetRecordFields t
+        fun (o: 't) -> [|
+            for field in fields do
+                let value = field.GetValue(o)
+                yield! serializeObj value
+        |]
+    else
+        Debugger.Break()
+        failwith ""
+type Voxel = { startIndex: int; count: int }
 let FragmentShader fn = fn
 let VertexShader fn = fn
 let Location n fn = fn
 let BuiltIn (b: Builtin) value = value
 let Var (items: VarType list) value = value
+
+        
 let rec frag = Shader.createFragment shader'
 // and shader' (screen: Screen, circles: float32[]) = <@
 // and shader' = <@ fun (Screen: Screen, Circles: float32[]) ->
 and shader' = <@ fun (Screen: Screen, Shapes: Shape[], Voxels: Voxel[], VoxelData: int[]) ->
     let screen = Var [Uniform] Screen
     let shapes = Var [Storage; ReadWrite] Shapes
-    let voxels = Var [Storage; ReadWrite] Shapes
-    let voxelData = Var [Storage; ReadWrite] VoxelData;
-    // {|
-        // fragment = fun (output: VertexOutput) ->
+    let voxels = Var [Storage; ReadWrite] Voxels
+    let voxelData = Var [Storage; ReadWrite] VoxelData
     
     let distanceSphere (sphere: vec3f) (radius: float32) (point: vec3f) : float32 =
         length(sphere - point) - radius
@@ -103,6 +256,137 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[], Voxels: Voxel[], VoxelDat
         | Sphere(v3, f) -> v3
         | Cube(v3, f) -> v3
         | RoundedCube(v3, f, f1) -> v3
+    
+    let fastVoxelDda (pos: vec3f) (rayDir: vec3f) =
+        // let pos = vec3(0f)
+        let foo = rayDir / rayDir
+        let map = floor(pos / screen.voxelGridScale)
+        // let rayDir = pixelPosition - cameraOrigin
+        let absRayDir = abs(rayDir)
+        let deltaDist = 1f / absRayDir
+        let S = step(vec3(0f), rayDir)
+        let stepDir = 2f * S - 1f
+        let sideDist = (S - stepDir * (pos - map)) * deltaDist
+        let conditions = step(sideDist.xxyy, sideDist.yzzx)
+        let cases = vec3(0f)
+        cases.x <- conditions.x * conditions.y
+        cases.y <- (1f - cases.x) * conditions.z * conditions.w
+        cases.z <- (1f - cases.x) * (1f - cases.y)
+        let newDist = max((2f * cases - 1f) * deltaDist, vec3(0f))
+        let offset = cases * stepDir
+        round(cases * rayDir / abs(rayDir))
+        // round(cases * deltaDist)
+    
+    let voxelShapeDistance (pos: vec3f) =
+        let quadrant = floor(pos / screen.voxelGridScale)
+        0f
+        
+    let getVoxelIndex x y z =
+        int z +
+        (int y * screen.voxelGridSize) +
+        (int x * screen.voxelGridSize * screen.voxelGridSize)
+        
+    let nextVoxel (start: vec3f) (dir: vec3f) (normalizedDir: vec3f) (scalingVec: vec3f) =
+        let offset = fastVoxelDda start dir
+        let globalOffset = vec3(0.5f * screen.voxelGridScale * float32 screen.voxelGridSize)
+        let mutable pos = start
+        let mutable voxel = floor(pos / screen.voxelGridScale)
+        let voxelFloat = round(voxel + globalOffset)
+        let mutable voxelIndex = getVoxelIndex voxelFloat.x voxelFloat.y voxelFloat.z
+        // while voxels[voxelIndex].count = 0 && voxelIndex < arrayLength(voxels) do
+        while voxels[voxelIndex].count = 0 && voxelIndex <> -1 do
+            let nextVoxel = floor(pos / screen.voxelGridScale) + offset
+            let diff = nextVoxel - pos
+            voxel <- nextVoxel
+            let relativeScaling = (offset * diff * scalingVec)
+            let distance = relativeScaling.x + relativeScaling.y + relativeScaling.z
+            let nextPosition = pos + (distance * normalizedDir)
+            pos <- nextPosition
+            let voxelFloat = round(voxel + globalOffset)
+            voxelIndex <- getVoxelIndex voxelFloat.x voxelFloat.y voxelFloat.z
+        // if voxelIndex = arrayLength(voxels) then
+        if voxelIndex = -1 then
+            vec4(pos, -1f)
+        else
+            vec4(pos, float32 voxelIndex)
+    
+    let voxelGroupDistance (groupId: int) (pos: vec3f) =
+        let info = voxels[groupId]
+        let mutable index = 0
+        let mutable distance = 1000f
+        while index < info.count && distance > 0.01f do
+            let shape = shapes[voxelData[info.startIndex + index]]
+            distance <- min(shapeDistance shape pos, distance)
+            index <- index + 1
+        distance
+        
+    let voxelDistance (pos: vec3f) (dir: vec3f) (normalized: vec3f) (scalingVec: vec3f) =
+        let next = nextVoxel pos dir normalized scalingVec
+        let sdf = voxelGroupDistance (int next.w) pos
+        let offset = length(vec3(next.x, next.y, next.z) - pos)
+        offset + sdf
+        
+    let fragment = FragmentShader begin fun (output: output) -> Location 0 begin
+        let metersPerPixel = 1f / 500f
+        let fl = 4f
+        // let cameraOrigin = vec3(0f, 0f, -fl)
+        let cameraOrigin = vec3(screen.posX, screen.posY, -fl)
+        let pixelPosition = vec3(
+            output.xy.x * metersPerPixel * screen.width,
+            output.xy.y * metersPerPixel * screen.height, 
+            0f)
+        let dir = pixelPosition - cameraOrigin
+        let normalized = normalize(dir)
+        let len = length(dir)
+        let lenX = len / normalized.x
+        let lenY = len / normalized.y
+        let lenZ = len / normalized.z
+        let scalingVec = vec3(lenX, lenY, lenZ)
+        
+        // let nextIndex = nextVoxel pos dir normalized scalingVec
+        // vec4(vec3(float32 nextIndex), 1f)
+        
+        let mutable pos = pixelPosition
+        let mutable iteration = 0
+        let mutable distance = voxelDistance pos dir normalized scalingVec
+        while distance > 0.01f && distance < 100f && iteration < 1000 do
+            iteration <- iteration + 1
+            pos <- pos + (distance * normalized)
+            distance <- voxelDistance pos dir normalized scalingVec
+        pos <- pos + (distance * normalized)
+        
+        if distance <= 0.01f then
+            vec4(1f)
+        else
+            vec4(vec3(0f), 1f)
+        
+        // if offset.x = 1f then
+        //     if dir.x > 0f then
+        //         vec4(1f, 0f, 0f, 0f)
+        //     else
+        //         if (dir / dir).x = -1f then
+        //             vec4(1f, 1f, 0f, 0f)
+        //         else
+        //             vec4(1f, 1f, 1f, 0f)
+        // elif abs(1f - offset.y) < 0.01f then
+        //     vec4(0f, 1f, 0f, 0f)
+        // elif abs(1f - offset.z) < 0.01f then
+        //     vec4(0f, 0f, 1f, 0f)
+        // elif abs(offset.z) > 0.01f then
+        //     vec4(0f, 0f, 1f, 0f)
+        // else
+        //     vec4(0f)
+        
+            
+        // Check if the next position
+        
+        
+        // if abs(1f - nextVoxel.x) < 0.01f then
+        // vec4(nextVoxel * 0.2f, 1f)
+    end end
+    // {|
+        // fragment = fun (output: VertexOutput) ->
+    
         
     let shapeNormal (shape: Shape) (p: vec3f) =
         // let e = vec2(0f, 0.0001f)
@@ -267,7 +551,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[], Voxels: Voxel[], VoxelDat
                 minDistance <- distance
             index <- index + 1
         shapes[index]
-    let fragment = FragmentShader (fun (output: output) -> Location 0 (
+    let fragment3 = FragmentShader (fun (output: output) -> Location 0 (
         let metersPerPixel = 1f / 500f
         let fl = 4f
         let cameraOrigin = vec3(0f, 0f, -fl)
@@ -337,4 +621,4 @@ let asdf = <@
 // let compiledWgsl = translateModule (shader' ({ gridSize = 0; posX = 0f; posY = 0f; width = 0f; height = 0f }, [||]))
 let compiledWgsl = translateModule shader' Module.empty
         
-let output = Print.module' compiledWgsl
+// let output = Print.module' compiledWgsl

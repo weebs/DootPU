@@ -15,7 +15,7 @@ module Demo =
 
 let gridSize = 22
 let memSize = uint64 (gridSize * gridSize * 4 * sizeof<float32>)
-let numShapes = 1000
+let numShapes = 100
 let shapesBufferSize = numShapes * 6 * 4
 
 let shapes = [|
@@ -38,7 +38,7 @@ options.ShouldSwapAutomatically <- false
 options.IsContextControlDisabled <- false
 let shader =
     // System.IO.File.ReadAllText(System.IO.Path.Join(__SOURCE_DIRECTORY__, "raymarching.wgsl")) + "\n" +
-    Shaders.output
+    Compiler.Print.module' Shaders.compiledWgsl
 printfn $"{shader}"
 let structs = Compiler.gatherStructs Shaders.shader'
 let mutable wgpu = Unchecked.defaultof<WebGPU>
@@ -52,7 +52,10 @@ let mutable shaderModule = Unchecked.defaultof<nativeptr<ShaderModule>>
 let mutable renderPipeline = Unchecked.defaultof<nativeptr<RenderPipeline>>
 // let mutable changingVertexBuffer = Unchecked.defaultof<nativeptr<_>>
 let mutable uniformBuffer = Unchecked.defaultof<nativeptr<_>>
+let voxelData = Array.zeroCreate (100 * 100 * 100)
 let mutable screenVar = Unchecked.defaultof<_>
+let mutable voxels = Unchecked.defaultof<_>
+let mutable shapeIndexes = Unchecked.defaultof<_>
 let mutable shapesVariable = Unchecked.defaultof<_>
 let mutable circlesBuffer = Unchecked.defaultof<nativeptr<_>>
 let mutable bindGroup = Unchecked.defaultof<_>
@@ -110,15 +113,18 @@ let onWindowLoad () =
     //     
     // )
     try
-        let serializeScreen (value: Shaders.Screen) =
-            [|
-                yield! BitConverter.GetBytes value.gridSize
-                yield! BitConverter.GetBytes value.posX
-                yield! BitConverter.GetBytes value.posY
-                yield! BitConverter.GetBytes value.width
-                yield! BitConverter.GetBytes value.height
-            |]
-        let binds = wgpu.CreateBinder device Shaders.shader'
+        // let serializeScreen (value: Shaders.Screen) =
+        //     [|
+        //         yield! BitConverter.GetBytes value.gridSize
+        //         yield! BitConverter.GetBytes value.voxelGridScale
+        //         yield! BitConverter.GetBytes value.gridSize
+        //         yield! BitConverter.GetBytes value.posX
+        //         yield! BitConverter.GetBytes value.posY
+        //         yield! BitConverter.GetBytes value.width
+        //         yield! BitConverter.GetBytes value.height
+        //     |]
+        let serializeScreen = Shaders.makeSerialize<Shaders.Screen>()
+        let binds = wgpu.CreateBinder Shaders.shader'
         let serializeShape (shape: Shaders.Shape) =
             let code, vec3, f, a =
                 match shape with
@@ -133,13 +139,27 @@ let onWindowLoad () =
                 yield! BitConverter.GetBytes f
                 yield! BitConverter.GetBytes a
             |]
-        let (screen, binds) = Wgpu.Bind binds { isUniform = true; size = 5 * 4 } serializeScreen
+        let serializeVoxel (voxel: Shaders.Voxel) =
+            [| yield! BitConverter.GetBytes voxel.startIndex; yield! BitConverter.GetBytes voxel.count |]
+        let (screen, binds) = Wgpu.Bind binds { usage = BufferUsage.CopyDst; isUniform = true; size = Shaders.sizeofWgslType<Shaders.Screen> () } serializeScreen
         // let (circles, binds) = Wgpu.Bind binds { isUniform = true; size = 4 * 10 } (fun _ -> [||])
         // let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = int memSize } serializeShape
-        let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = shapesBufferSize } serializeShape
+        let voxelGridSize = 100
+        let (shapes, binds) = Wgpu.Bind binds { usage = BufferUsage.CopyDst; isUniform = false; size = shapesBufferSize } serializeShape
+        let (voxels_, binds) =
+            Wgpu.Bind binds {
+                isUniform = false
+                usage = BufferUsage.CopyDst
+                size = Shaders.sizeofWgslType<Shaders.Voxel> () * (voxelGridSize * voxelGridSize * voxelGridSize)
+            } serializeVoxel
+        let (shapeIndexes_, binds) = Wgpu.Bind binds { usage = BufferUsage.CopyDst; isUniform = false; size = 108000 } BitConverter.GetBytes
         let group = wgpu.InitBindings device binds
+        
+        voxels <- voxels_
+        shapeIndexes <- shapeIndexes_
         screenVar <- screen
         shapesVariable <- shapes
+        
         uniformBuffer <- screen.Buffer
         circlesBuffer <- shapes.Buffer
         bindGroup <- group.bindGroup
@@ -298,15 +318,13 @@ let onWindowRender t =
             shapes[index + 3] <- float32 time
     do
         use shapes = fixed shapes
-        screenVar.Write(wgpu, queue, {
-            gridSize = 0
-            posX = posX
-            posY = posY
-            width = float32 windowWidth
-            height = float32 windowHeight
-        })
-        // wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
-        shapesVariable.Write (wgpu, queue, 0uL, [|
+        let voxelGridSize = 100
+        let getVoxelIndex x y z =
+            int z +
+            (int y * voxelGridSize) +
+            (int x * voxelGridSize * voxelGridSize)
+        let populatedVoxels = Dictionary()
+        let allShapes = [|
             for i in 0..numShapes - 1 do
                 // let position = Wgsl.Wgsl.vec3(posX + float32 i, 0f, 4f)
                 // let position = Wgsl.Wgsl.vec3(posX + float32 i, posY + float32 i, 10f)
@@ -318,12 +336,45 @@ let onWindowRender t =
                     MathF.Sin((float32 i * 0.2f) + float32 time) * 10.48f,
                     float32 i - 10f,
                     MathF.Cos((float32 i * 0.2f) + float32 time) * 10.48f + 20f)
+                let voxelPos = Wgsl.Wgsl.floor(position)
+                for x in int voxelPos.x - 1 .. int voxelPos.x + 1 do
+                    for y in int voxelPos.y - 1 .. int voxelPos.y + 1 do
+                        for z in int voxelPos.z - 1 .. int voxelPos.z + 1 do
+                            let index = getVoxelIndex (x + 50) (y + 50) (z + 50)
+                            if not (populatedVoxels.ContainsKey index) then
+                                populatedVoxels[index] <- ResizeArray()
+                            populatedVoxels[index].Add i
                 let size = 0.25f
                 let tag = i % 3
                 if tag = 0 then Shaders.Sphere (position, size)
                 elif tag = 1 then Shaders.Cube (position, size)
                 else Shaders.RoundedCube (position, size, 0.12f)
-        |])
+        |]
+        let data = ResizeArray()
+        // let mutable offset = 0
+        // let mutable index = 0
+        // let voxelsGrid = [|
+        for i in 0..(100 * 100 * 100) - 1 do
+            if populatedVoxels.ContainsKey i then
+                let offset = data.Count
+                for shapeIndex in populatedVoxels[i] do data.Add shapeIndex
+                voxelData[i] <- ({ count = populatedVoxels[i].Count; startIndex = offset } : Shaders.Voxel)
+            else
+                voxelData[i] <- ({ count = 0; startIndex = 0 } : Shaders.Voxel)
+        // |]
+        screenVar.Write(wgpu, queue, {
+            gridSize = 0
+            voxelGridScale = 1.0f
+            voxelGridSize = voxelGridSize 
+            posX = posX
+            posY = posY
+            width = float32 windowWidth
+            height = float32 windowHeight
+        })
+        // wgpu.QueueWriteBuffer(queue, uniformBuffer, 0uL, data |> NativePtr.toVoidPtr, unativeint binding0Size)
+        shapesVariable.Write (wgpu, queue, 0uL, allShapes)
+        voxels.Write (wgpu, queue, 0uL, voxelData)
+        shapeIndexes.Write (wgpu, queue, 0uL, data.ToArray())
         // wgpu.QueueWriteBuffer(queue, circlesBuffer, 0uL, shapes |> NativePtr.toVoidPtr, unativeint memSize)
         
         wgpu.RenderPassEncoderDraw(renderPass, 6u, 2u, 0u, 0u)
