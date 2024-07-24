@@ -68,7 +68,8 @@ let rec frag = Shader.createFragment shader'
 // and shader' (screen: Screen, circles: float32[]) = <@
 // and shader' = <@ fun (Screen: Screen, Circles: float32[]) ->
 and shader' = <@ fun (Screen: Screen, Shapes: Shape[], Voxels: Voxel[], VoxelData: int[]) ->
-    let screen = Var [Uniform] Screen
+    // let screen = Var [Uniform] Screen
+    let screen = Var [Storage; ReadWrite] Screen
     let shapes = Var [Storage; ReadWrite] Shapes
     let voxels = Var [Storage; ReadWrite] Voxels
     let voxelData = Var [Storage; ReadWrite] VoxelData
@@ -137,7 +138,7 @@ and shader' = <@ fun (Screen: Screen, Shapes: Shape[], Voxels: Voxel[], VoxelDat
         let stepDir = 2f * S - 1f
         let sideDist = (S - stepDir * (pos - map)) * deltaDist
         let conditions = step(sideDist.xxyy, sideDist.yzzx)
-        let cases = vec3(0f)
+        let mutable cases = vec3(0f)
         cases.x <- conditions.x * conditions.y
         cases.y <- (1f - cases.x) * conditions.z * conditions.w
         cases.z <- (1f - cases.x) * (1f - cases.y)

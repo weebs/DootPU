@@ -34,7 +34,10 @@ type DotnetBuffer =
     }
 module Wgpu =
     let getAttributes (customAttributes: CustomAttributeData seq) =
-        customAttributes |> Seq.choose (fun data ->
+        customAttributes
+        |> Seq.filter (fun c ->
+            c.Constructor.DeclaringType.BaseType = typeof<Wgsl.WgslAttribute>)
+        |> Seq.choose (fun data ->
             let c = data.Constructor.Invoke(data.ConstructorArguments |> Seq.map _.Value |> Seq.toArray)
             match c with
             | :? Wgsl.WgslAttribute as attr -> Some attr.Serialize
@@ -42,6 +45,8 @@ module Wgpu =
         ) |> Seq.toList
     let rec getMethodBody e =
         match e with
+        | Patterns.Let (var, Patterns.TupleGet (Patterns.Var tpl, index), in_) when tpl.Name = "tupledArg" ->
+            getMethodBody in_
         | Patterns.Lambda (_, e2) -> getMethodBody e2
         | _ -> e
         
@@ -61,8 +66,22 @@ type Setup =
                     let attrs = p.CustomAttributes |> Wgpu.getAttributes
                     p.Name, Compiler.toType p.ParameterType, attrs)
                 |> Array.toList
-            attrs = Wgpu.getAttributes method.CustomAttributes
-            returnAttr = None
+            attrs =
+                Wgpu.getAttributes method.CustomAttributes
+                |> fun items ->
+                    if items |> List.exists (fun i -> i.StartsWith "@vertex" || i.StartsWith "@fragment") then
+                        items |> List.filter (fun i -> i.StartsWith "@location" = false)
+                    else
+                        items
+            returnAttr =
+                method.CustomAttributes |> Seq.tryPick (fun p ->
+                    if p.Constructor.DeclaringType = typeof<Wgsl.LocationAttribute> then
+                        match p.Constructor.Invoke (p.ConstructorArguments |> Seq.map _.Value |> Seq.toArray) with
+                        | :? Wgsl.LocationAttribute as location -> Some location.Serialize
+                        | _ -> None
+                    else
+                        None
+                )
             returnType =
                 if method.ReturnType = typeof<System.Void> then None
                 else Some (Compiler.toType method.ReturnType)
@@ -111,13 +130,15 @@ type Setup =
         let ctors = typeof<'b>.GetConstructors()
         let buffers = Setup.calculateBuffers t
         let ctor = ctors[0]
-        let structs =
+        let structs = ResizeArray()
+        do
             ctor.GetParameters()
             |> Array.filter (_.ParameterType >> Compiler.requiresDecl)
             |> Array.map (fun p ->
                 Compiler.structsUsedByType p.ParameterType
                 |> Array.map (fun s -> p.Name, s))
             |> Array.collect id
+            |> structs.AddRange
             // |> Array.map (fun p -> p.ParameterType.Name, Compiler.translateStruct p.ParameterType)
         let moduleArgTypes =
             if FSharpType.IsTuple t then
@@ -132,6 +153,14 @@ type Setup =
                     Some (method.Name, (method, e))
                 | method -> None)
             |> Map.ofArray
+        let methodTypes =
+            methods |> Array.map (fun m -> m.GetParameters() |> Array.map _.ParameterType |> Array.append [| m.ReturnType |]) |> Array.collect id |> Array.distinct
+        do
+            methodTypes
+            |> Array.map Compiler.structsUsedByType
+            |> Array.collect id
+            |> Array.map (fun s -> fst s, s)
+            |> structs.AddRange
         let compiled = ResizeArray()
         for (method, e) in methodQuotations.Values do
             let result = compileMethod method e
@@ -139,7 +168,7 @@ type Setup =
         {
             unfinishedBindings = Map.empty
             bindings = Setup.calculateBuffers t
-            structs = Map.ofArray structs
+            structs = Map.ofSeq structs
             fns = compiled |> Seq.map (fun fn -> fn.name, fn) |> Map.ofSeq
         }
     
@@ -187,14 +216,23 @@ module PollExtensions =
             let mutable value = desc |> Option.defaultValue (CommandEncoderDescriptor())
             this.DeviceCreateCommandEncoder(device, &&value)
     
+// type Foo =
+//     class
+//         val mutable NextInChain : int
+//         new () = Operators.Unchecked.defaultof<Foo>
+//     end
+// module A =
+//     let f = new Foo(y = 1)
 [<AutoOpen>]
 module rec Wrappers =
-    type WebGPU'(wgpu: WebGPU) as this =
+    type WebGPU'(wgpu: WebGPU, ?instance, ?requestAdapterOptions) as this =
         inherit WebGPU(wgpu.Context)
-        let instance = wgpu.CreateInstance()
-        let adapter = wgpu.RequestAdapterAsync(instance).Result
+        let instance = instance |> Option.defaultWith (fun () -> wgpu.CreateInstance())
+        let adapter = wgpu.RequestAdapterAsync(instance, ?request=requestAdapterOptions).Result
         let device = Device'(this, wgpu.RequestDeviceAsync(adapter).Result)
         member this.Device = device
+        member this.Instance = instance
+        member this.Adapter = adapter
         // member this.CreateBinder (shader: Quotations.Expr<'a * 'b -> _>) =
         //     // let infoForType (t: System.Type) : BufferInfo =
         //         // { isUniform = false; size = 0uL }
@@ -399,8 +437,9 @@ type Wgpu =
     static member Map(binding: ShaderBinder<'t[]>, ?serializer) = fun size -> 
         let serializer = serializer |> Option.defaultWith (fun () ->
             Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
-        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
-        let info = { size = size; isUniform = false; usage = bufferUsage }
+        let sizeofType = 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let bufferSize = size * sizeofType
+        let info = { size = bufferSize; isUniform = false; usage = bufferUsage }
         ShaderMap<'t>(binding.Info.wgpu, binding.Info.wgpu.Device.Device, binding.Buffer, int info.size, serializer), binding.BufferRefs info
     static member Map(bindings: ShaderBinder<'t2[], 't1>) = fun wgpu device info -> fun serializer ->
         ShaderMap<'t2>(wgpu, device, bindings.Buffer, int info.size, serializer), bindings.Rest info
@@ -442,7 +481,7 @@ module WebGPUBindExtensions =
             // let serializer = serializer |> Option.defaultWith (fun () ->
                 // Dootverse.WebGPU.Compiler.makeSerialize<'t4> ())
             ShaderVariable<'t4>(binding.Buffer, serializer), binding.Rest info
-        static member Map(binding: ShaderBinder<'t>, ?serializer) = fun info ->
+        static member MapI(binding: ShaderBinder<'t>, ?serializer) = fun info ->
             let serializer = serializer |> Option.defaultWith (fun () ->
                 Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
             ShaderMapVar<'t>(binding.Buffer, serializer), binding.BufferRefs info
@@ -503,6 +542,8 @@ module Extensions =
             let mutable texture = SurfaceTexture()
             this.SurfaceGetCurrentTexture(surface, &&texture)
             texture
+        member inline this.CreateRenderPipeline(device, descriptor) =
+            this.DeviceCreateRenderPipeline(device, &descriptor)
         member inline this.CreatePipelineLayout(device, entries: _ []) =
             use ptr = fixed entries
             let mutable descriptor = PipelineLayoutDescriptor(
@@ -511,7 +552,7 @@ module Extensions =
                 BindGroupLayouts = ptr
             )
             this.DeviceCreatePipelineLayout(device, &&descriptor)
-        member inline this.CreateBuffers(device, entries: _ []) =
+        member inline this.CreateBuffers (device, entries: _ []) =
             [| for descriptor in entries do
                 this.CreateBuffer(device, descriptor) |]
             
@@ -535,15 +576,15 @@ module Extensions =
             let bindGroup = this.CreateBindGroup(device, bindGroupLayout, bindings)
             {| buffers = buffers; bindings = bindings; bindGroup = bindGroup |}
             
-        member this.CreateBuffers device = fun (infos: BufferInfo[]) ->
+        member this.CreateBuffers visibility = fun device (infos: BufferInfo[]) ->
             let layouts = [|
                 for i in 0..infos.Length - 1 do
                     let info = infos[i]
                     let minBindingSize = uint64 info.size
-                    let visibility =
-                        if info.isUniform
-                        then ShaderStage.Compute
-                        else ShaderStage.Compute
+                    // let visibility =
+                        // if info.isUniform
+                        // then ShaderStage.Compute
+                        // else ShaderStage.Compute
                     BindGroupLayoutEntry(
                         Binding = uint i,
                         Visibility = visibility,
@@ -558,15 +599,16 @@ module Extensions =
             |]
             let descriptors = [|
                 for info in infos do
-                    let usage =
-                        if info.isUniform
-                        then BufferUsage.Uniform
-                        else BufferUsage.Storage
+                    // let usage =
+                        // if info.isUniform
+                        // then BufferUsage.Uniform
+                        // else BufferUsage.Storage
                     BufferDescriptor(
                         Size = uint64 info.size,
                         // Usage = (usage ||| BufferUsage.CopyDst)
                         // Usage = (usage ||| info.usage)
-                        Usage = info.usage
+                        Usage = info.usage,
+                        Label = C.string (Guid.NewGuid().ToString())
                     )
             |]
             let layout = this.CreateBindGroupLayout(device, layouts)
@@ -576,7 +618,7 @@ module Extensions =
             // let layout: nativeptr<BindGroupLayout> = this.ComputePipelineGetBindGroupLayout(pipeline, 0u)
             // let layout = this.CreateBindGroupLayout()
             let infos = vars |> Array.map _.info
-            let result = (this.CreateBuffers device infos)
+            let result = (this.CreateBuffers ShaderStage.Compute device infos)
             let computeLayout = this.CreatePipelineLayout(device, [| result.bindGroupLayout |])
             let shaderModule =
                 let mutable wgslDesc = ShaderModuleWGSLDescriptor(
@@ -599,9 +641,9 @@ module Extensions =
             {| result with
                 pipeline = pipeline
                 shaderModule = shaderModule |}
-        member this.InitBindings (device: nativeptr<Device>) (vars: DotnetBuffer array) =
+        member this.InitBindings stage (device: nativeptr<Device>) (vars: DotnetBuffer array) =
             let infos = vars |> Array.map _.info
-            let group = this.CreateBuffers device infos
+            let group = this.CreateBuffers stage device infos
             for i in 0..group.buffers.Length - 1 do
                 vars[i].ptr.Value <- group.buffers[i]
             {| bindGroup = group.bindGroup; layout = group.bindGroupLayout |}
@@ -654,12 +696,13 @@ module Extensions =
             let info = { wgpu = this; code = code }
             ShaderBinder<'a, 'b, 'c, 'd>(info, [])
         member this.CreateBinder (shader: Quotations.Expr<'a * 'b * 'c * 'd -> _>) =
-            failwith ""
-            Unchecked.defaultof<ShaderBinder<'a, 'b, 'c, 'd>>
+            // failwith ""
+            // Unchecked.defaultof<ShaderBinder<'a, 'b, 'c, 'd>>
+            let m = Compiler.translateModule shader Compiler.Module.empty
             // let m = Setup.compileModule shader
-            // let code = Compiler.Print.module' m
-            // let info = { wgpu = this; code = code }
-            // ShaderBinder<'a, 'b, 'c, 'd>(info, [])
+            let code = Compiler.Print.module' m
+            let info = { wgpu = this; code = code }
+            ShaderBinder<'a, 'b, 'c, 'd>(info, [])
     type ComputePipeline(name, bindings: ShaderWithBindings) =
         let device = bindings.Info.wgpu.Device
         let group = device.CreateCompute bindings.Info.code name bindings.Buffers

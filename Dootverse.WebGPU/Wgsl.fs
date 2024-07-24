@@ -25,16 +25,23 @@ type Builtin =
     | VertexIndex
 type Builtin' =
     | position = 0
-    | vertexIndex = 1
+    | vertex_index = 1
     | global_invocation_id = 2
 // let Position = { new Builtin with member _.Foo = () }
 // type BuiltInAttribute<'t when 't :> Builtin>(name: string) = inherit Attribute()
 type ComputeAttribute() =
     inherit WgslAttribute()
     override this.Serialize = "@compute"
-type WorkgroupSizeAttribute(size: int) =
+type VertexAttribute() =
     inherit WgslAttribute()
-    override this.Serialize = $"@workgroup_size({size})"
+    override this.Serialize = "@vertex"
+type FragmentAttribute() =
+    inherit WgslAttribute()
+    override this.Serialize = "@fragment"
+type WorkgroupSizeAttribute(a, b, c) =
+    inherit WgslAttribute()
+    new a = WorkgroupSizeAttribute(a, a, a)
+    override this.Serialize = $"@workgroup_size({a}, {b}, {c})"
     
 type BuiltInAttribute(value: Builtin') =
     inherit WgslAttribute()
@@ -67,7 +74,7 @@ and Numeric<'t when
     't :> IDivisionOperators<'t, 't, 't>> = 't
 // and Vec3<'t when 't :> Numeric<'t>> = unit
 // and Vec(value: Numeric<'t>) = class end
-and vec3<'t when
+and [<Struct>] vec3<'t when
     't :> IAdditionOperators<'t, 't, 't> and
     't :> IMultiplyOperators<'t, 't, 't> and
     't :> ISubtractionOperators<'t, 't, 't> and
@@ -108,6 +115,8 @@ and vec3<'t when
     static member op_Subtraction
         (v3: vec3<'t>, f: 't) =
         { x = v3.x - f; y = v3.y - f; z = v3.z - f }
+    member this.yzx = { x = this.y; y = this.z; z = this.x }
+    member this.zxy = { x = this.z; y = this.x; z = this.y }
     // member this.x with get () = x and set value = ()
     // member this.y with get () = y and set value = ()
     // member this.z with get () = z and set value = ()
@@ -118,7 +127,7 @@ type Foo<'t> = 't
 type Wgsl =
     static member abs(p: vec3f) = failwith ""
     static member abs(f: float32) = MathF.Abs(f)
-    static member abs(f: vec3f) : vec3f = failwith ""
+    static member abs(f: vec3f) : vec3f = Wgsl.vec3(abs(f.x), abs(f.y), abs(f.z))
     static member round(f: vec3f) : vec3f = failwith ""
     static member arrayLength(values: 't[]) = values.Length
     static member step (a: vec4<int>, b: vec4<int>) : vec4<int> = failwith ""
@@ -130,12 +139,33 @@ type Wgsl =
     static member max(a: vec3f, b: vec3f) = failwith ""
     static member max(a: vec4<float32>, b: vec4<float32>) : vec4<float32> = failwith ""
     static member max(a: vec4<float32>, b: float32) : vec4<float32> = failwith ""
-    static member max(a: vec3<float32>, b: vec3<float32>) : vec3<float32> = failwith ""
+    static member max(a: vec3<float32>, b: vec3<float32>) : vec3<float32> =
+        Wgsl.vec3(max a.x b.x, max a.y b.y, max a.z b.z)
+    static member min(a: vec3<float32>, b: vec3<float32>) : vec3<float32> =
+        Wgsl.vec3(min a.x b.x, min a.y b.y, min a.z b.z)
     // static member max(a: vec3f, b: float32) = failwith ""
     static member max(a: float32, b: float32) = MathF.Max(a, b)
     static member inline vec2(a, b) = { x = a; y = b; }
     static member inline vec3(a) = { x = a; y = a; z = a }
-    static member inline vec3(a, b, c) = { x = a; y = b; z = c }
+    static member vec3(a, b, c) = { x = a; y = b; z = c }
+    static member inline lessThanEqual (a: vec3<'t>, b: vec3<'t>) =
+        {
+            x = if a.x <= b.x then 1f else 0f
+            y = if a.y <= b.y then 1f else 0f
+            z = if a.z <= b.z then 1f else 0f
+        }
+    static member inline greaterThanEqual (a: vec3<'t>, b: vec3<'t>) =
+        {
+            x = if a.x >= b.x then 1f else 0f
+            y = if a.y >= b.y then 1f else 0f
+            z = if a.z >= b.z then 1f else 0f
+        }
+    static member inline lessThan (a: vec3<'t>, b: vec3<'t>) =
+        {
+            x = if a.x < b.x then 1f else 0f
+            y = if a.y < b.y then 1f else 0f
+            z = if a.z < b.z then 1f else 0f
+        }
     static member inline vec4(a, b, c, d) = { x = a; y = b; z = c; w = d; }
     static member vec4(value: float32) = Wgsl.vec4(value, value, value, value)
     static member vec4(value: int32) = Wgsl.vec4(value, value, value, value)
@@ -149,3 +179,9 @@ type Wgsl =
     static member sqrt f = MathF.Sqrt f
     static member floor(a: float32) = MathF.Floor a
     static member floor(a: vec3<float32>) : vec3<float32> = Wgsl.vec3(floor(a.x), floor(a.y), floor(a.z))
+    static member sign(a: vec3<float32>) : vec3<float32> =
+        {
+            x = if a.x > 0f then 1f elif a.x < 0f then -1f else 0f
+            y = if a.y > 0f then 1f elif a.y < 0f then -1f else 0f
+            z = if a.z > 0f then 1f elif a.z < 0f then -1f else 0f
+        }

@@ -68,8 +68,8 @@ type WgslModuleStatement =
     | Struct of WgslStruct
     | Alias
     | ModuleVar of binding: (int * int) option * name: string * types: string list * varType: WgslType
-    | Function of name: string * args: (string * WgslType * string list) list * attrs: WgslAttr list * returning: WgslType option * statements: WgslStatement list
-type WgslFunc = {
+    | Function of name: string * args: (string * WgslType * string list) list * attrs: WgslAttr list * returning: WgslType option * returnAttr: string option * statements: WgslStatement list
+and WgslFunc = {
     name: string
     args: (string * WgslType * string list) list
     attrs: WgslAttr list
@@ -94,6 +94,7 @@ module rec Print =
     open Wgsl
     let call (callee: string) (args: WgslExpr list) =
         match callee with
+        | "Sqrt" -> $"sqrt({expr args[0]})"
         | "ToInt" -> $"i32({expr args[0]})"
         | "ToSingle" -> $"f32({expr args[0]})"
         | "GetArray" -> $"{expr args[0]}[{expr args[1]}]"
@@ -110,6 +111,9 @@ module rec Print =
         | "op_Inequality" -> $"({expr args[0]} != {expr args[1]})"
         | "op_LessThan" -> $"({expr args[0]} < {expr args[1]})"
         | "op_LessThanOrEqual" -> $"({expr args[0]} <= {expr args[1]})"
+        | "lessThanEqual" -> $"({expr args[0]} <= {expr args[1]})"
+        | "greaterThanEqual" -> $"({expr args[0]} >= {expr args[1]})"
+        | "lessThan" -> $"({expr args[0]} < {expr args[1]})"
         | _ ->
             let callArgs = String.concat ", " (List.map expr args)
             $"{callee}({callArgs})"
@@ -122,7 +126,8 @@ module rec Print =
             match wgslConst with
             | Int i -> $"{i}"
             | Float f ->
-                let s = $"{f}"
+                // let s = $"{f}"
+                let s = f.ToString("0.############")
                 if s.Contains "." then s else s + ".0"
             | Unsigned u -> $"{u}"
         | BinaryAnd(wgslExpr, e) -> $"({expr wgslExpr} && {expr e})"
@@ -198,7 +203,7 @@ module rec Print =
                     "};"
                 ]
             | Alias -> ()
-            | Function(name, args, attrs, returning, statements) ->
+            | Function(name, args, attrs, returning, returnAttr, statements) ->
                 let argsList =
                     args 
                     |> List.map (fun (name, t, attrs) ->
@@ -209,7 +214,16 @@ module rec Print =
                 items.Add [
                     if attrs.Length <> 0 then
                         attrs |> List.map string |> String.concat " "
-                    $"fn {name}({argsList})" + (match returning with None -> "" | Some t -> " -> " + type' t) + " {"
+                    $"fn {name}({argsList})" +
+                    (match returning with
+                     | None -> ""
+                     | Some t ->
+                         " -> " +
+                         (match returnAttr with
+                          | None -> ""
+                          | Some attr -> $"{attr} ") +
+                         type' t) +
+                    " {"
                     yield! List.map Print.statement statements |> List.collect id
                     "}"
                 ]
@@ -223,7 +237,7 @@ module rec Print =
             for kv in module_.bindings do
                 ModuleVar (kv.Value.binding, kv.Value.name, List.map string kv.Value.varTypes, kv.Value.varType)
             for kv in module_.fns do
-                Function (kv.Key, kv.Value.args, kv.Value.attrs, kv.Value.returnType, kv.Value.fn)
+                Function (kv.Key, kv.Value.args, kv.Value.attrs, kv.Value.returnType, kv.Value.returnAttr, kv.Value.fn)
         ]
         shader items
 open Wgsl
@@ -359,6 +373,14 @@ and makeSerialize<'t> () =
         fun (i: 't) -> BitConverter.GetBytes (box i :?> float32)
     elif t = typeof<uint> then
         fun (i: 't) -> BitConverter.GetBytes (box i :?> uint)
+    elif t = typeof<vec3f> then
+        fun (i: 't) ->
+            let value = box i :?> vec3f
+            [|
+                yield! BitConverter.GetBytes value.x
+                yield! BitConverter.GetBytes value.y
+                yield! BitConverter.GetBytes value.z
+            |]
     else
         Debugger.Break()
         failwith ""
@@ -605,7 +627,7 @@ and translateModuleItem (item: Quotations.Expr) (module_: Module) =
                 name = v.Name
                 returnAttr = None 
                 args = args
-                attrs = [ if method.Name = "VertexShader" then "vertex" else "fragment" ]; 
+                attrs = [ if method.Name = "VertexShader" then "@vertex" else "@fragment" ]; 
                 returnType = Some rt
                 fn = addReturn abs
             }) }
@@ -622,7 +644,12 @@ and translateStruct (t: Type) =
     // structsUsedByType t
     
 and requiresDecl (t: Type) =
-    if t.IsArray then false
+    if t = typeof<int> then false
+    elif t = typeof<float32> then false
+    elif t = typeof<uint> then false
+    elif t = typeof<int[]> then false
+    elif t = typeof<float32[]> then false
+    elif t = typeof<uint[]> then false
     else true
 and translateModule (expr: Quotations.Expr) (module_: Module) : Module =
     let rec getModule (e: Quotations.Expr) acc =
@@ -755,6 +782,14 @@ and structsUsedByType (t: Type) : WgslStruct array =
     elif FSharpType.IsFunction t then
         let a, b = FSharpType.GetFunctionElements t
         structsUsedByType a |> Array.append (structsUsedByType b)
+    elif t.IsArray then
+        let argType =
+            t.GetMethods()
+            |> Array.find (fun m -> m.Name = "Get")
+            |> _.ReturnParameter.ParameterType
+        match argType with
+        | WgslStruct fields -> [| fields |]
+        | _ -> [||]
     else
         match t with
         | WgslStruct fields -> [| fields |]

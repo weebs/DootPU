@@ -142,19 +142,21 @@ let onWindowLoad () =
             |]
         let serializeVoxel (voxel: Shaders.Voxel) =
             [| yield! BitConverter.GetBytes voxel.startIndex; yield! BitConverter.GetBytes voxel.count |]
-        let (screen, binds') = Wgpu.BindI (binds, { usage = BufferUsage.CopyDst; isUniform = true; size = Shaders.sizeofWgslType<Shaders.Screen> () }, serializeScreen)
+        let flags = BufferUsage.CopyDst ||| BufferUsage.Storage
+        // let flags = BufferUsage.CopyDst
+        let (screen, binds') = Wgpu.BindI (binds, { usage = flags; isUniform = false; size = Shaders.sizeofWgslType<Shaders.Screen> () }, serializeScreen)
         // let (circles, binds) = Wgpu.Bind binds { isUniform = true; size = 4 * 10 } (fun _ -> [||])
         // let (shapes, binds) = Wgpu.Bind binds { isUniform = false; size = int memSize } serializeShape
         let voxelGridSize = 100
-        let (shapes, binds'') = Wgpu.BindI (binds', { usage = BufferUsage.CopyDst; isUniform = false; size = shapesBufferSize }, serializeShape)
+        let (shapes, binds'') = Wgpu.BindI (binds', { usage = flags; isUniform = false; size = shapesBufferSize }, serializeShape)
         let (voxels_, binds''') =
             Wgpu.BindI (binds'', {
                 isUniform = false
-                usage = BufferUsage.CopyDst
+                usage = flags
                 size = Shaders.sizeofWgslType<Shaders.Voxel> () * (voxelGridSize * voxelGridSize * voxelGridSize)
             }, serializeVoxel)
-        let (shapeIndexes_, binds'''') = Wgpu.BindI (binds''', { usage = BufferUsage.CopyDst; isUniform = false; size = 108000 })
-        let group = wgpu.InitBindings device binds''''.Buffers
+        let (shapeIndexes_, binds'''') = Wgpu.BindI (binds''', { usage = flags; isUniform = false; size = 108000 })
+        let group = wgpu.InitBindings ShaderStage.Fragment device binds''''.Buffers
         
         voxels <- voxels_
         shapeIndexes <- shapeIndexes_
@@ -223,7 +225,7 @@ let onWindowLoad () =
             // Layout = wgpu.CreatePipelineLayout(device, [| group.bindGroupLayout |])
             Layout = wgpu.CreatePipelineLayout(device, [| group.layout |])
         )
-        renderPipeline  <- wgpu.DeviceCreateRenderPipeline(device, &renderPipelineDescriptor)
+        renderPipeline  <- wgpu.CreateRenderPipeline(device, renderPipelineDescriptor)
         // changingVertexBuffer <- wgpu.DeviceCreateBuffer(device, &&desc)
         swap ()
     with error ->

@@ -30,10 +30,12 @@ type Data =
     }
 [<ReflectedDefinition>]
 type Shader(data: Data, grid: int[], output: int[]) =
-    [<Compute; WorkgroupSize 1>]
+    [<Compute; WorkgroupSize 64>]
     member this.main([<BuiltIn(Builtin'.global_invocation_id)>] globalId: vec3<uint>) =
         // output[int globalId.x - 1] <- int globalId.x * output[int globalId.x - 1] * data.gridSize
-        output[int globalId.x] <- int globalId.x + 4
+        // output[int globalId.x] <- int globalId.x + 4
+        // output[int globalId.x] <- int globalId.x + data.gridSize
+        output[int globalId.x] <- grid[int globalId.x]
         
     // interface WgslShader
     // let (|NotNull|) value = if value = null then failwith "" else value
@@ -55,7 +57,7 @@ module Extensions =
             code, binds
     // let bufferUsage = BufferUsage.CopySrc ||| BufferUsage.CopyDst ||| BufferUsage.Storage
     
-let gridSize = 20
+let gridSize = 64
 let n = gridSize * gridSize
 [<Test>]
 let ``refactoring : run a compute shader with automatic setup`` () =
@@ -65,13 +67,22 @@ let ``refactoring : run a compute shader with automatic setup`` () =
     let setup = Init.setup Shader wgpu
     let (data, setup) = Wgpu.Bind setup
     let (grid, setup) = Wgpu.Bind setup n
+    let map = [|
+        for y in 1..gridSize do
+            for x in 1..gridSize do
+                if y > gridSize / 2 && x % 4 = 0 then
+                    1
+                else
+                    0
+    |]
     let (output, setup) = Wgpu.Map setup n
     use compute = new Extensions.ComputePipeline("main", setup)
-    compute.Begin (uint numsArray.Length, 1u, 1u)
+    compute.Begin (uint numsArray.Length / 64u, 1u, 1u)
         (fun encoder ->
             output.AddCopy(wgpu, encoder))
         (fun queue ->
-            data.Write (wgpu, queue, { gridSize = 20 })
+            grid.Write (wgpu, queue, 0uL, map)
+            data.Write (wgpu, queue, { gridSize = gridSize })
             output.Write (wgpu, queue, 0uL, numsArray))
     let fut = output.ReadBufferRange(wgpu, 0, numsArray.Length)
     let result = fut.Result
