@@ -136,7 +136,7 @@ type Setup =
             |> Array.filter (_.ParameterType >> Compiler.requiresDecl)
             |> Array.map (fun p ->
                 Compiler.structsUsedByType p.ParameterType
-                |> Array.map (fun s -> p.Name, s))
+            )
             |> Array.collect id
             |> structs.AddRange
             // |> Array.map (fun p -> p.ParameterType.Name, Compiler.translateStruct p.ParameterType)
@@ -159,7 +159,6 @@ type Setup =
             methodTypes
             |> Array.map Compiler.structsUsedByType
             |> Array.collect id
-            |> Array.map (fun s -> fst s, s)
             |> structs.AddRange
         let compiled = ResizeArray()
         for (method, e) in methodQuotations.Values do
@@ -168,7 +167,7 @@ type Setup =
         {
             unfinishedBindings = Map.empty
             bindings = Setup.calculateBuffers t
-            structs = Map.ofSeq structs
+            structs = Map.ofSeq (structs |> Seq.map (fun s -> fst s, s))
             fns = compiled |> Seq.map (fun fn -> fn.name, fn) |> Map.ofSeq
         }
     
@@ -225,14 +224,21 @@ module PollExtensions =
 //     let f = new Foo(y = 1)
 [<AutoOpen>]
 module rec Wrappers =
-    type WebGPU'(wgpu: WebGPU, ?instance, ?requestAdapterOptions) as this =
+    type WebGPU'(wgpu: WebGPU, ?instance, ?requestAdapterOptions, ?surface) as this =
         inherit WebGPU(wgpu.Context)
         let instance = instance |> Option.defaultWith (fun () -> wgpu.CreateInstance())
+        // let instance = wgpu.CreateInstance()
         let adapter = wgpu.RequestAdapterAsync(instance, ?request=requestAdapterOptions).Result
         let device = Device'(this, wgpu.RequestDeviceAsync(adapter).Result)
+        new (window: Silk.NET.Windowing.IWindow) =
+            let api = WebGPU.GetApi()
+            let inst = api.CreateInstance()
+            let surface = window.CreateWebGPUSurface(api, inst)
+            new WebGPU'(api, inst, RequestAdapterOptions(CompatibleSurface=surface), surface)
         member this.Device = device
         member this.Instance = instance
         member this.Adapter = adapter
+        member this.Surface = surface.Value
         // member this.CreateBinder (shader: Quotations.Expr<'a * 'b -> _>) =
         //     // let infoForType (t: System.Type) : BufferInfo =
         //         // { isUniform = false; size = 0uL }

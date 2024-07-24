@@ -16,6 +16,18 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "App", "..\FableGame\src\App
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Signaling.Server", "Signaling.Server\Signaling.Server.fsproj", "{AF26B6A3-C95D-4249-A867-6ABE96E12C05}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Tests.Web", "Tests.Web\Tests.Web.fsproj", "{2B41ED3C-7A6C-474C-8F21-17F35B2B7841}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Library.Game", "Library.Game\Library.Game.fsproj", "{19489292-9C7D-412A-84E9-76FDD7063D3B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPU.Demo.CS", "WebGPU.Demo.CS\WebGPU.Demo.CS.csproj", "{5B95D48D-7622-440F-B500-F65F9576C46B}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Dootverse.WebGPU", "Dootverse.WebGPU\Dootverse.WebGPU.fsproj", "{4C473CC6-5CC1-40E0-A670-8531224A3FED}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Dootverse.Godot3.FSharp", "GodotGame\Dootverse.Godot3.FSharp\Dootverse.Godot3.FSharp.fsproj", "{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dootverse.Godot3", "GodotGame\Dootverse.Godot3.csproj", "{40CEB204-E2C6-4208-95C3-E5C48DB9523F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -54,5 +66,29 @@ Global
 		{AF26B6A3-C95D-4249-A867-6ABE96E12C05}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF26B6A3-C95D-4249-A867-6ABE96E12C05}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF26B6A3-C95D-4249-A867-6ABE96E12C05}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B41ED3C-7A6C-474C-8F21-17F35B2B7841}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B41ED3C-7A6C-474C-8F21-17F35B2B7841}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B41ED3C-7A6C-474C-8F21-17F35B2B7841}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B41ED3C-7A6C-474C-8F21-17F35B2B7841}.Release|Any CPU.Build.0 = Release|Any CPU
+		{19489292-9C7D-412A-84E9-76FDD7063D3B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{19489292-9C7D-412A-84E9-76FDD7063D3B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{19489292-9C7D-412A-84E9-76FDD7063D3B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{19489292-9C7D-412A-84E9-76FDD7063D3B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B95D48D-7622-440F-B500-F65F9576C46B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B95D48D-7622-440F-B500-F65F9576C46B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B95D48D-7622-440F-B500-F65F9576C46B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B95D48D-7622-440F-B500-F65F9576C46B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C473CC6-5CC1-40E0-A670-8531224A3FED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C473CC6-5CC1-40E0-A670-8531224A3FED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C473CC6-5CC1-40E0-A670-8531224A3FED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C473CC6-5CC1-40E0-A670-8531224A3FED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5F5405A-256E-49F5-8D2D-6EBD3337F3CD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{40CEB204-E2C6-4208-95C3-E5C48DB9523F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{40CEB204-E2C6-4208-95C3-E5C48DB9523F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{40CEB204-E2C6-4208-95C3-E5C48DB9523F}.Release|Any CPU.ActiveCfg = Debug|Any CPU
+		{40CEB204-E2C6-4208-95C3-E5C48DB9523F}.Release|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="ImageDisplay.fs" />
+        <Compile Include="Program.fs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Dootverse.WebGPU.fsproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Bolero.WebView" Version="1.0.0" />
+      <PackageReference Include="GirCore.Gtk-4.0" Version="0.5.0" />
+    </ItemGroup>
+
+</Project>
