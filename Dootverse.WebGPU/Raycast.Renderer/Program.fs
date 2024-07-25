@@ -14,21 +14,11 @@ open System.Collections.Generic
 
 type Ptr =
     static member inline arrayPtr (values: 't[]) =
-        // let ptr = NativePtr.stackalloc<'t> values.Length
-        // for i in 1..values.Length do
-            // NativePtr.set ptr (i - 1) values[i - 1]
-        // ptr
-        // Span(NativePtr.toVoidPtr ptr, values.Length)
-        // Operators.Unchecked.defaultof<_>
         use ptr = fixed values
         ptr
     static member inline ptr<'t when 't : unmanaged> (value: 't) =
         use ptr = fixed [| value |]
         ptr
-        
-// [<AutoOpen>]
-// module Extension =
-// type Ptr with
         
 open type Ptr
 
@@ -54,18 +44,13 @@ let createRender (wgpu: WebGPU) device (surfaceCapabilities: SurfaceCapabilities
     )
     let colorTargetState = ColorTargetState(
         Format = NativePtr.read surfaceCapabilities.Formats,
-        // Blend = &&blendState,
-        // Blend = stackalloc blendState,
         Blend = arrayPtr [| blendState |],
         WriteMask = ColorWriteMask.All
     )
     let fragmentState = FragmentState(
         Module = shaderModule,
         TargetCount = unativeint 1,
-        // Targets = stackArray [| colorTargetState |],
-        // Targets = &&colorTargetState,
         Targets = arrayPtr [| colorTargetState |],
-        // EntryPoint = NativePtr.ofNativeInt (SilkMarshal.StringToPtr("fs_main"))
         EntryPoint = C.string "fragment"
     )
     let renderPipelineDescriptor = RenderPipelineDescriptor(
@@ -92,32 +77,6 @@ let createRender (wgpu: WebGPU) device (surfaceCapabilities: SurfaceCapabilities
         Layout = layout
     )
     wgpu.CreateRenderPipeline(device, renderPipelineDescriptor)
-open type Wgsl
-type Output = {
-    [<BuiltIn(Builtin'.position)>] position: vec4<float32>
-    [<Location(0)>] xy: vec2<float32>
-}
-[<ReflectedDefinition>]
-type Shader(data: int[], output: int[]) =
-    [<Wgsl.Vertex>]
-    member this.vertex([<BuiltIn(Builtin'.vertex_index)>] index: uint) =
-        let pos = [|
-            vec2(-1f, 1f)
-            vec2(-1f, -1f)
-            vec2(1f, -1f)
-            
-            vec2(1f, 1f)
-            vec2(-1f, 1f)
-            vec2(1f, -1f)
-        |]
-        let n = int index
-        {
-            xy = vec2(pos[n].x,pos[n].y)
-            position = vec4(pos[n], 0f, 1f)
-        }
-    [<Fragment; Location 0>]
-    member this.fragment(vertexOutput: Output) =
-        vec4(0.2f, vertexOutput.xy.x, vertexOutput.xy.y, 1f)
 // [<AbstractClass>]
 type WebGpuWin(window: IWindow, bindings: ShaderWithBindings) as this =
     let mutable windowWidth = 1920
@@ -213,18 +172,39 @@ type WebGpuWin(window: IWindow, bindings: ShaderWithBindings) as this =
         //     
         // )
 // type yo' (window: IWindow, wgpu: WebGPU', shaderCode, shader) as this =
+open type Wgsl
+type Output = {
+    [<Location(0)>] xy: vec2<float32>
+    [<BuiltIn(Builtin'.position)>] position: vec4<float32>
+}
+[<ReflectedDefinition>]
+type Shader(data: int[], output: int[]) =
+    [<Wgsl.Vertex>]
+    member this.vertex([<BuiltIn(Builtin'.vertex_index)>] index: uint) =
+        let pos = [|
+            vec2(-1f, 1f)
+            vec2(-1f, -1f)
+            vec2(1f, -1f)
+            
+            vec2(1f, 1f)
+            vec2(-1f, 1f)
+            vec2(1f, -1f)
+        |]
+        let n = int index
+        {
+            xy = vec2(pos[n].x,pos[n].y)
+            position = vec4(pos[n], 0f, 1f)
+        }
+    [<Fragment; Location 0>]
+    member this.fragment(vertexOutput: Output) =
+        vec4(0.05f, vertexOutput.xy.x, vertexOutput.xy.y, 1f)
 let yo' (window: IWindow) =
-    // let api = WebGPU.GetApi()
-    // let inst = api.CreateInstance()
-    // let surface = window.CreateWebGPUSurface(api, inst)
-    // let wgpu = new WebGPU'(api, inst, RequestAdapterOptions(CompatibleSurface=surface))
     let wgpu = new WebGPU'(window)
     let state = wgpu.CreateBinder Shader
     let (voxels, state) = Wgpu.Bind state 10
     let (output, state) = Wgpu.Map state 10
     let win = WebGpuWin(window, state)
     let wgpu = win.Wgpu
-    let device = wgpu.Device.Device
     
     let mutable time = 0.
     
@@ -247,29 +227,21 @@ let yo' (window: IWindow) =
             ClearValue = Color(0, 1, 0, 1)
         )
         
-        let encoderDescriptor = CommandEncoderDescriptor()
-        let encoder = wgpu.DeviceCreateCommandEncoder(device, &encoderDescriptor)
-        let queue = wgpu.DeviceGetQueue(device)
-        let renderPass = wgpu.StartRenderPass(encoder, [| colorAttachment |])
-        wgpu.RenderPassEncoderSetPipeline(renderPass, win.RenderPipeline)
-        wgpu.RenderPassEncoderSetBindGroup(renderPass, 0u, win.BindGroup, unativeint 0, Unchecked.defaultof<nativeptr<_>>)
+        let encoder = wgpu.Device.CreateCommandEncoder ()
+        let queue = wgpu.Device.GetQueue ()
+        let renderPass = encoder.StartRenderPass' (colorAttachment)
+        renderPass.SetPipeline win.RenderPipeline
+        renderPass.SetBindGroup win.BindGroup 0u
         
-        do
-            voxels.Write(wgpu, queue, 0uL, [| 1; 2; 3; 4; 5; 6; 7; 8; 0; 11 |])
-            
-            wgpu.RenderPassEncoderDraw(renderPass, 6u, 2u, 0u, 0u)
-            wgpu.RenderPassEncoderEnd(renderPass)
-            let cbd = CommandBufferDescriptor()
-            use buffer = fixed [| wgpu.CommandEncoderFinish(encoder, &cbd) |]
-            wgpu.QueueSubmit(queue, unativeint 1, buffer)
-            
-            wgpu.SurfacePresent(win.Surface)
-            wgpu.CommandBufferRelease(NativePtr.read buffer)
-            wgpu.CommandEncoderRelease(encoder)
-    // )
-    // window.Run()
-    // override this.Init =
-
+        voxels.Write (wgpu, queue, 0uL, [| 1; 2; 3; 4; 5; 6; 7; 8; 0; 11 |])
+        
+        renderPass.Draw 6u 2u 0u 0u
+        renderPass.End ()
+        let buffer = arrayPtr [| encoder.Finish() |]
+        wgpu.QueueSubmit (queue, unativeint 1, buffer)
+        wgpu.SurfacePresent (win.Surface)
+        wgpu.CommandBufferRelease (NativePtr.read buffer)
+        encoder.Release ()
 
 let mutable options = WindowOptions.Default
 options.API <- GraphicsAPI.None

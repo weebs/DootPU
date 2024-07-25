@@ -7,7 +7,8 @@
 
     <ItemGroup>
         <Compile Include="ImageDisplay.fs" />
-        <Compile Include="Program.fs"/>
+        <Compile Include="ComputeShaders.fs" />
+        <Compile Include="Raycast.Compute.fs" />
     </ItemGroup>
 
     <ItemGroup>

@@ -74,7 +74,7 @@ and Numeric<'t when
     't :> IDivisionOperators<'t, 't, 't>> = 't
 // and Vec3<'t when 't :> Numeric<'t>> = unit
 // and Vec(value: Numeric<'t>) = class end
-and [<Struct>] vec3<'t when
+and vec3<'t when
     't :> IAdditionOperators<'t, 't, 't> and
     't :> IMultiplyOperators<'t, 't, 't> and
     't :> ISubtractionOperators<'t, 't, 't> and

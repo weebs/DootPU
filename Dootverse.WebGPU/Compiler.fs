@@ -129,7 +129,7 @@ module rec Print =
                 // let s = $"{f}"
                 let s = f.ToString("0.############")
                 if s.Contains "." then s else s + ".0"
-            | Unsigned u -> $"{u}"
+            | Unsigned u -> $"{u}u"
         | BinaryAnd(wgslExpr, e) -> $"({expr wgslExpr} && {expr e})"
         | BinaryEq(wgslExpr, e) -> $"({expr wgslExpr} == {expr e})"
         | Array (t, values) ->
@@ -303,6 +303,7 @@ and translateExpr (expr: Quotations.Expr) =
         | :? int32 as i -> Value (Int i)
         | :? float32 as f -> Value (Float f)
         | :? string as s -> Value (Unsigned 4205731365u)
+        | :? uint as u -> Value (Unsigned u)
         | _ -> failwith $"translateExpr: Cannot translate value {o}"
     | Patterns.Application (callee, arg) ->
         call callee arg
