@@ -21,19 +21,25 @@ module Shaders =
         widthPixels: int; heightPixels: int
         cameraX: float32; cameraY: float32; cameraZ: float32
         voxelGridScale: float32
+        debugX: int
+        debugY: int
+        blue: int
+        purple: int
     }
     type [<Struct>] RaycastResult = {
-        distance: float32; t: int
-        resultX: float32; resultY: float32; resultZ: float32
-        deltaX: float32
-        deltaY: float32
-        deltaZ: float32
-        maskX: float32
-        maskY: float32
-        maskZ: float32
-        posX: float32; posY: float32
-        pixelX: uint
-        pixelY: uint
+        distance: float32
+        t: int
+        color: int
+        // resultX: float32; resultY: float32; resultZ: float32
+        // deltaX: float32
+        // deltaY: float32
+        // deltaZ: float32
+        // maskX: float32
+        // maskY: float32
+        // maskZ: float32
+        // posX: float32; posY: float32
+        // pixelX: int
+        // pixelY: int
     }
     type [<Struct>] Steps = {
         posX: float32; posY: float32; posZ: float32
@@ -45,10 +51,44 @@ module Shaders =
     }
     type Raycaster(cfg: Config, grid: int[], output: RaycastResult[], steps: Steps[]) =
     // type Raycaster(cfg: Config, grid: int[], output: RaycastResult[]) =
-        let dda (rayPos: vec3f) rayDir =
+        let fastDda (rayPos: vec3f) (rayDir: vec3f) =
+            let mapPos = floor rayPos
+            // let deltaDist = abs(1f / normalize(rayDir))
+            let closestVoxelDir = sign(rayDir) + mapPos
+            let distancePerSide = abs(closestVoxelDir - rayPos)
+            let mutable lengthPerSide = length(rayDir) / abs(rayDir)
+            if lengthPerSide.x = 1f / 0f then
+                lengthPerSide.x <- 1000000000f
+            if lengthPerSide.y = 1f / 0f then
+                lengthPerSide.y <- 1000000000f
+            if lengthPerSide.z = 1f / 0f then
+                lengthPerSide.z <- 1000000000f
+            let sidePerLength = abs(rayDir) / length(rayDir)
+            let scaledPerSide = distancePerSide * lengthPerSide
+            let mask = lessThanEqual(scaledPerSide, min(scaledPerSide.yzx, scaledPerSide.zxy))
+            let maskf = vec3(float32(mask.x), float32(mask.y), float32(mask.z))
+            let intermediateResult = scaledPerSide * maskf
+            // todo : max
+            let toTravel = max(intermediateResult.x, max(intermediateResult.y, intermediateResult.z))
+            let offset = toTravel * sidePerLength * sign(rayDir)
+            let result = rayPos + offset
+            {
+                nextPos = result
+                voxel = floor result
+            }
+            // let closestVoxel = sign(rayDir) 
+        let dda (rayPos: vec3f) (rayDir1: vec3f) =
+            let rayDir = rayDir1 * 100f
             let mapPos = floor(rayPos + 0f);
             let len = length(rayDir)
-            let deltaDist = abs(vec3(len) / rayDir)
+            // let mutable deltaDist = abs(vec3(len) / rayDir)
+            let mutable deltaDist = abs(1f / normalize(rayDir))
+            if deltaDist.x = (1f / 0f) then
+                deltaDist.x <- 0.00000000001f
+            if deltaDist.y = (1f / 0f) then
+                deltaDist.y <- 0.00000000001f
+            if deltaDist.z = (1f / 0f) then
+                deltaDist.z <- 0.00000000001f
             let mutable fixedDistance = vec3(0f)
             let epsilon = 0.00000001f
             if abs(rayDir.x) > epsilon then
@@ -90,10 +130,16 @@ module Shaders =
             // let nextTileDistance = max(nextTileOffset.x, max(nextTileOffset.y, nextTileOffset.z))
             // let offsetVec = nextTileDistance * rayDir / length(rayDir)
             let p = rayPos
-            let toReturn2 = rayPos + scaledOffset
+            let toReturn2 = rayPos + scaledOffset + (rayStep * epsilon * maskf)
             // toReturn
             // { nextPos = toReturn; voxel = floor(mapPos + (maskf * rayStep) * 1.5f) }
-            { nextPos = toReturn; voxel = floor(rayPos + (maskf * rayStep)) }
+            // { nextPos = toReturn; voxel = floor(rayPos + (maskf * rayStep)) }
+            {
+                nextPos = toReturn
+                // voxel = floor (toReturn + (rayStep * epsilon * maskf))
+                voxel = mapPos + (maskf * rayStep)
+                // voxel = floor(rayPos + (maskf * rayStep) + (0.5f * maskf * rayStep))
+            }
         // member this.raycast (pixelX, pixelY) =
         //     let screenWidthMeters = 1f
         //     let pcX = float32 pixelX / float32 cfg.widthPixels
@@ -149,7 +195,19 @@ module Shaders =
             }
         let checkPos (pos: vec3f) =
             let voxel = floor pos
-            grid[arrayIndex voxel]
+            let xOffset = voxel - vec3(1f, 0f, 0f)
+            let yOffset = voxel - vec3(0f, 1f, 0f)
+            let zOffset = voxel - vec3(0f, 0f, 1f)
+            if grid[arrayIndex voxel] <> 0 then
+                grid[arrayIndex voxel]
+            elif pos.x = voxel.x && grid[arrayIndex xOffset] <> 0 then
+                grid[arrayIndex xOffset]
+            elif pos.y = voxel.y && grid[arrayIndex yOffset] <> 0 then
+                grid[arrayIndex yOffset]
+            elif pos.z = voxel.z && grid[arrayIndex zOffset] <> 0 then
+                grid[arrayIndex zOffset]
+            else
+                0
             // if grid[arrayIndex voxel] <> 0 then
                 
         member this.raycast (pixelX, pixelY) =
@@ -171,30 +229,21 @@ module Shaders =
                 rayhit <- grid[index]
             let mutable i = 0
             let dir = vec3(dirX, dirY, 1f)
-            let maxIterations = 10
-            let debugX =
-                110u
-                // 180u
-                // 117u
-                // 608u // 500u
-            let debugY =
-                320u
-                // 328u
-                // 350u
-                // 464u // 420u
-            if pixelX = debugX && pixelY = debugY then
+            let maxIterations = 200
+            if pixelX = cfg.debugX && pixelY = cfg.debugY then
                 logStep (0, pos, voxel)
             while rayhit = -1 && i < maxIterations && 
                   int pos.x < cfg.gridSize && 
                   int pos.z < cfg.gridSize do
                 i <- i + 1
-                let ddaResult = dda pos dir
+                // let ddaResult = dda pos dir
+                let ddaResult = fastDda pos dir
                 pos <- ddaResult.nextPos
                 voxel <- ddaResult.voxel
                 index <- arrayIndex voxel
                 // let newVoxel = floor(pos)
                 // let arrayIndex = (int newVoxel.x) + (int newVoxel.z * cfg.gridSize)
-                if pixelX = debugX && pixelY = debugY then
+                if pixelX = cfg.debugX && pixelY = cfg.debugY then
                     logStep (i, pos, voxel)
                 if pos.y >= 1f then
                     i <- maxIterations
@@ -202,34 +251,41 @@ module Shaders =
                 elif pos.y <= 0f then
                     i <- maxIterations
                     rayhit <- 0
+                // elif checkPos pos <> 0 then
                 elif checkPos pos <> 0 then
-                // elif index < maxIndex && grid[index] <> 0 then
                     rayhit <- checkPos pos
+                    rayhit <- cfg.blue
+                // elif index < maxIndex && grid[index] <> 0 then
+                    // rayhit <- checkPos pos
             let dx = pos.x - cfg.cameraX
             let dy = pos.y - cfg.cameraY
             {
                 distance = sqrt((dx * dx) + (dy * dy))
                 t = rayhit
-                resultX = pos.x
-                resultY = pos.y
-                resultZ = pos.z
-                pixelX = pixelX
-                pixelY = pixelY
-                posX = offsetX
-                posY = offsetY
-                deltaX = deltaDir.x
-                deltaY = deltaDir.y
-                deltaZ = deltaDir.z
-                maskX = mask.x
-                maskY = mask.y
-                maskZ = mask.z
+                color = rayhit
+                // resultX = pos.x
+                // resultY = pos.y
+                // resultZ = pos.z
+                // pixelX = pixelX
+                // pixelY = pixelY
+                // posX = offsetX
+                // posY = offsetY
+                // deltaX = deltaDir.x
+                // deltaY = deltaDir.y
+                // deltaZ = deltaDir.z
+                // maskX = mask.x
+                // maskY = mask.y
+                // maskZ = mask.z
             }
         [<Compute; WorkgroupSize(1, 64, 1)>]
         member this.main([<BuiltIn(Builtin'.global_invocation_id)>] globalId: vec3<uint>) =
-            let result = this.raycast (globalId.x, globalId.y)
-            let mutable error = 0
             let index = int globalId.x + (cfg.widthPixels * int globalId.y)
+            let result = this.raycast (int globalId.x, int globalId.y)
+            let mutable error = 0
             if index > (cfg.widthPixels * cfg.heightPixels) then
                 error <- 1
             output[index] <- result
+            // if int globalId.x = cfg.debugX then
+                // output[index] <- { distance = 0f; t = 8675309; color = cfg.purple }
+                // vec4(0f, 1f, 1f, 1f)
 

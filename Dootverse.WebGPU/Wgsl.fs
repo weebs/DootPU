@@ -93,7 +93,8 @@ and vec3<'t when
     static member (/)
         (v3: vec3<'t>, scale: 't) = { x = v3.x / scale; y = v3.y / scale; z = v3.z / scale }
     static member (/)
-        (scale: 't, v3: vec3<'t>) = { x = v3.x / scale; y = v3.y / scale; z = v3.z / scale }
+        // (scale: 't, v3: vec3<'t>) = { x = v3.x / scale; y = v3.y / scale; z = v3.z / scale }
+        (scale: 't, v3: vec3<'t>) = { x = scale / v3.x; y = scale / v3.y; z = scale / v3.z }
     static member (/)
         (v3: vec3<'t>, v3': vec3<'t>) = { x = v3.x / v3'.x; y = v3.y / v3'.y; z = v3.z / v3'.z }
     static member op_Multiplication
