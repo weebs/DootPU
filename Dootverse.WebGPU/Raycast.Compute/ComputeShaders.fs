@@ -12,6 +12,9 @@ open Microsoft.AspNetCore.Components
 open Microsoft.JSInterop
 open Silk.NET.WebGPU
 
+// type U =
+//     type A = class end
+
 open type Wgsl
 
 [<ReflectedDefinition>]
@@ -48,35 +51,10 @@ module Shaders =
     type [<Struct>] Result = {
         nextPos: vec3f
         voxel: vec3f
+        offsetVoxel: vec3f
     }
     type Raycaster(cfg: Config, grid: int[], output: RaycastResult[], steps: Steps[]) =
     // type Raycaster(cfg: Config, grid: int[], output: RaycastResult[]) =
-        let fastDda (rayPos: vec3f) (rayDir: vec3f) =
-            let mapPos = floor rayPos
-            // let deltaDist = abs(1f / normalize(rayDir))
-            let closestVoxelDir = sign(rayDir) + mapPos
-            let distancePerSide = abs(closestVoxelDir - rayPos)
-            let mutable lengthPerSide = length(rayDir) / abs(rayDir)
-            if lengthPerSide.x = 1f / 0f then
-                lengthPerSide.x <- 1000000000f
-            if lengthPerSide.y = 1f / 0f then
-                lengthPerSide.y <- 1000000000f
-            if lengthPerSide.z = 1f / 0f then
-                lengthPerSide.z <- 1000000000f
-            let sidePerLength = abs(rayDir) / length(rayDir)
-            let scaledPerSide = distancePerSide * lengthPerSide
-            let mask = lessThanEqual(scaledPerSide, min(scaledPerSide.yzx, scaledPerSide.zxy))
-            let maskf = vec3(float32(mask.x), float32(mask.y), float32(mask.z))
-            let intermediateResult = scaledPerSide * maskf
-            // todo : max
-            let toTravel = max(intermediateResult.x, max(intermediateResult.y, intermediateResult.z))
-            let offset = toTravel * sidePerLength * sign(rayDir)
-            let result = rayPos + offset
-            {
-                nextPos = result
-                voxel = floor result
-            }
-            // let closestVoxel = sign(rayDir) 
         let dda (rayPos: vec3f) (rayDir1: vec3f) =
             let rayDir = rayDir1 * 100f
             let mapPos = floor(rayPos + 0f);
@@ -138,6 +116,7 @@ module Shaders =
                 nextPos = toReturn
                 // voxel = floor (toReturn + (rayStep * epsilon * maskf))
                 voxel = mapPos + (maskf * rayStep)
+                offsetVoxel = floor toReturn - mapPos
                 // voxel = floor(rayPos + (maskf * rayStep) + (0.5f * maskf * rayStep))
             }
         // member this.raycast (pixelX, pixelY) =
@@ -176,13 +155,13 @@ module Shaders =
         //         dirZ = 0f
         //         pixelX = pixelX
         //         pixelY = pixelY
-        //         posX = 0f
+        //         posX = 0fa
         //         posY = 0f
         //         resultX = 0f
         //         resultY = 0f
         //         resultZ = 0f
         //     }
-        let arrayIndex (voxel: vec3f) =
+        let toIndex (voxel: vec3f) =
             int voxel.x + int voxel.z * cfg.gridSize
         let logStep (i, pos, voxel) =
             steps[i] <- {
@@ -195,19 +174,72 @@ module Shaders =
             }
         let checkPos (pos: vec3f) =
             let voxel = floor pos
+            let diff = abs(pos - voxel)
+            let epsilon = 0.00000001f
             let xOffset = voxel - vec3(1f, 0f, 0f)
             let yOffset = voxel - vec3(0f, 1f, 0f)
             let zOffset = voxel - vec3(0f, 0f, 1f)
-            if grid[arrayIndex voxel] <> 0 then
-                grid[arrayIndex voxel]
-            elif pos.x = voxel.x && grid[arrayIndex xOffset] <> 0 then
-                grid[arrayIndex xOffset]
-            elif pos.y = voxel.y && grid[arrayIndex yOffset] <> 0 then
-                grid[arrayIndex yOffset]
-            elif pos.z = voxel.z && grid[arrayIndex zOffset] <> 0 then
-                grid[arrayIndex zOffset]
+            if grid[toIndex voxel] <> 0 then
+                grid[toIndex voxel]
+            elif diff.x <= epsilon && grid[toIndex xOffset] <> 0 then
+                grid[toIndex xOffset]
+            elif diff.y <= epsilon && grid[toIndex yOffset] <> 0 then
+                grid[toIndex yOffset]
+            elif diff.z <= epsilon && grid[toIndex zOffset] <> 0 then
+                grid[toIndex zOffset]
             else
                 0
+        let fastDda (rayPos: vec3f) (rayDir: vec3f) =
+            let mapPos = floor rayPos
+            // let deltaDist = abs(1f / normalize(rayDir))
+            let quantized = sign(rayDir)
+            // let mutable distancePerSide = quantized + rayPos
+            // if quantized.x < 0f then
+            //     distancePerSide.x <- ceil distancePerSide.x
+            // else
+            //     distancePerSide.x <- floor distancePerSide.x
+            // if quantized.y < 0f then
+            //     distancePerSide.y <- ceil distancePerSide.y
+            // else
+            //     distancePerSide.y <- floor distancePerSide.y
+            // if quantized.z < 0f then
+            //     distancePerSide.z <- ceil distancePerSide.z
+            // else
+            //     distancePerSide.z <- floor distancePerSide.z
+            let bGreater = greaterThan(quantized, vec3(0f))
+            let bLess = lessThan(quantized, vec3(0f))
+            let greater = vec3(float32(bGreater.x), float32(bGreater.y), float32(bGreater.z))
+            let lesser = vec3(float32(bLess.x), float32(bLess.y), float32(bLess.z))
+            let nextVoxel = 
+                (floor (quantized + rayPos) * greater)
+                + (ceil (quantized + rayPos) * lesser)
+            let distancePerSide = abs(nextVoxel - rayPos)
+            let closestVoxelDir = sign(rayDir) + mapPos
+            // let distancePerSide = abs(closestVoxelDir - rayPos)
+            let maxVal = 1000000000f
+            let mutable rayLengthPerSide = length(rayDir) / abs(rayDir)
+            if rayLengthPerSide.x = 1f / 0f then
+                rayLengthPerSide.x <- maxVal
+            if rayLengthPerSide.y = 1f / 0f then
+                rayLengthPerSide.y <- maxVal
+            if rayLengthPerSide.z = 1f / 0f then
+                rayLengthPerSide.z <- maxVal
+            let sidePerLength = abs(rayDir) / length(rayDir)
+            let scaledPerSide = distancePerSide * rayLengthPerSide
+            let mask = lessThanEqual(scaledPerSide, min(scaledPerSide.yzx, scaledPerSide.zxy))
+            let maskf = vec3(float32(mask.x), float32(mask.y), float32(mask.z))
+            let intermediateResult = scaledPerSide * maskf
+            // todo : max
+            let toTravel = max(intermediateResult.x, max(intermediateResult.y, intermediateResult.z))
+            let offset = toTravel * sidePerLength * sign(rayDir)
+            let result = rayPos + offset
+            let offsetVoxel = floor result - mapPos
+            {
+                nextPos = result
+                voxel = floor result
+                offsetVoxel = offsetVoxel
+            }
+            // let closestVoxel = sign(rayDir) 
             // if grid[arrayIndex voxel] <> 0 then
                 
         member this.raycast (pixelX, pixelY) =
@@ -223,7 +255,7 @@ module Shaders =
             let mutable voxel = floor(pos)
             let mutable deltaDir = vec3(0f)
             let mutable mask = vec3(0f)
-            let mutable index = arrayIndex voxel
+            let mutable index = toIndex voxel
             let mutable rayhit = -1
             if index < maxIndex && grid[index] <> 0 then
                 rayhit <- grid[index]
@@ -240,7 +272,7 @@ module Shaders =
                 let ddaResult = fastDda pos dir
                 pos <- ddaResult.nextPos
                 voxel <- ddaResult.voxel
-                index <- arrayIndex voxel
+                index <- toIndex voxel
                 // let newVoxel = floor(pos)
                 // let arrayIndex = (int newVoxel.x) + (int newVoxel.z * cfg.gridSize)
                 if pixelX = cfg.debugX && pixelY = cfg.debugY then

@@ -155,6 +155,12 @@ type Wgsl =
             y = if a.y <= b.y then 1f else 0f
             z = if a.z <= b.z then 1f else 0f
         }
+    static member inline greaterThan (a: vec3<'t>, b: vec3<'t>) =
+        {
+            x = if a.x > b.x then 1f else 0f
+            y = if a.y > b.y then 1f else 0f
+            z = if a.z > b.z then 1f else 0f
+        }
     static member inline greaterThanEqual (a: vec3<'t>, b: vec3<'t>) =
         {
             x = if a.x >= b.x then 1f else 0f
@@ -179,8 +185,10 @@ type Wgsl =
     static member normalize (v3: vec3f) = v3 / Wgsl.length(v3)
     static member sqrt f = MathF.Sqrt f
     static member floor(a: float32) = MathF.Floor a
-    static member floor(a: vec3<float32>) : vec3<float32> = Wgsl.vec3(floor(a.x), floor(a.y), floor(a.z))
-    static member sign(a: vec3<float32>) : vec3<float32> =
+    static member ceil (a: float32) : float32 = MathF.Ceiling a
+    static member ceil (a: vec3<float32>) : vec3<float32> = Wgsl.vec3(ceil(a.x), ceil(a.y), ceil(a.z))
+    static member floor (a: vec3<float32>) : vec3<float32> = Wgsl.vec3(floor(a.x), floor(a.y), floor(a.z))
+    static member sign (a: vec3<float32>) : vec3<float32> =
         {
             x = if a.x > 0f then 1f elif a.x < 0f then -1f else 0f
             y = if a.y > 0f then 1f elif a.y < 0f then -1f else 0f
