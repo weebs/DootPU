@@ -52,6 +52,7 @@ type WgslExpr =
     | PropGet of source: WgslExpr * field: string
     | IndexAccess of array: WgslExpr * index: WgslExpr
     | Value of WgslConst
+    | BinaryOr of WgslExpr * WgslExpr
     | BinaryAnd of WgslExpr * WgslExpr
     | BinaryEq of WgslExpr * WgslExpr
     | Array of WgslType * WgslExpr list
@@ -112,6 +113,7 @@ module rec Print =
         | "op_LessThan" -> $"({expr args[0]} < {expr args[1]})"
         | "op_LessThanOrEqual" -> $"({expr args[0]} <= {expr args[1]})"
         | "lessThanEqual" -> $"({expr args[0]} <= {expr args[1]})"
+        | "greaterThan" -> $"({expr args[0]} > {expr args[1]})"
         | "greaterThanEqual" -> $"({expr args[0]} >= {expr args[1]})"
         | "lessThan" -> $"({expr args[0]} < {expr args[1]})"
         | _ ->
@@ -130,8 +132,11 @@ module rec Print =
                 let s = f.ToString("0.############")
                 if s.Contains "." then s else s + ".0"
             | Unsigned u -> $"{u}u"
-        | BinaryAnd(wgslExpr, e) -> $"({expr wgslExpr} && {expr e})"
+
         | BinaryEq(wgslExpr, e) -> $"({expr wgslExpr} == {expr e})"
+        | BinaryOr(wgslExpr, e) -> $"({expr wgslExpr} || {expr e})"
+        | BinaryAnd(wgslExpr, e) -> $"({expr wgslExpr} && {expr e})"
+
         | Array (t, values) ->
             let args = List.map expr values |> String.concat ", "
             $"array<{type' t}, {values.Length}>({args})"
@@ -285,6 +290,12 @@ and exprType (expr: Quotations.Expr) =
     | _ -> typeof<unit>
 and translateExpr (expr: Quotations.Expr) =
     match expr with
+    | OR conditions ->
+        let rec loop = function
+            | [a; b] -> BinaryOr (translateExpr a, translateExpr b)
+            | a :: rest -> BinaryOr (translateExpr a, loop rest)
+            | _ -> failwith "Invalid OR result in translateExpr for Compiler.fs"
+        loop conditions
     | Patterns.IfThenElse (cond, true', Patterns.Value (o, t)) when t = typeof<bool> && (o :?> bool) = false ->
         BinaryAnd (translateExpr cond, translateExpr true')
     | Patterns.UnionCaseTest (e, info) ->
@@ -446,6 +457,18 @@ and getMatchExprs statement =
             // [], statement
             None
     loop [] statement
+and simpleExpr (e: Quotations.Expr) =
+    match e with
+    | Patterns.WhileLoop _ -> false
+    | Patterns.Call (thisArg, method, args) ->
+        let anyNonSimple =
+         args |> List.exists (not << simpleExpr)
+        match thisArg, anyNonSimple with
+        | (Some (SimpleExpr _) | None), false -> true
+        | _ -> false
+    | _ -> true
+and (|SimpleExpr|_|) (statement: Quotations.Expr) = 
+    if simpleExpr statement then Some statement else None
 and (|DecisionTree|_|) (statement: Quotations.Expr) = getMatchExprs statement
     // match statement with
     // | MatchExpr _ ->
@@ -453,6 +476,26 @@ and (|DecisionTree|_|) (statement: Quotations.Expr) = getMatchExprs statement
     //     Some (acc, e)
     // | _ ->
     //     None
+and (|OR|_|) (e: Quotations.Expr) =
+    match e with
+    | Patterns.IfThenElse(SimpleExpr e, True, SimpleExpr else_) ->
+        Some [ e; else_ ]
+    | Patterns.IfThenElse(SimpleExpr e, True, OR b) ->
+        Some [ e; yield! b ]
+    // TODO
+    // | Patterns.IfThenElse(OR _, True, OR b) ->
+    //     Some [ e; yield! b ]
+    // | Patterns.IfThenElse(OR _, True, SimpleExpr else_) ->
+    //     Some [ e; yield! b ]
+    | _ -> None
+and (|True|_|) (e: Quotations.Expr) =
+    match e with
+    | Patterns.Value (o, _) -> match o with :? bool as b when b = true -> Some () | _ -> None
+    | _ -> None
+and (|False|_|) (e: Quotations.Expr) =
+    match e with
+    | Patterns.Value (o, _) -> match o with :? bool as b when b = true -> Some () | _ -> None
+    | _ -> None
 and translateStatement (statement: Quotations.Expr) =
     match statement with
     | DecisionTree (union, ut, acc, e) ->
