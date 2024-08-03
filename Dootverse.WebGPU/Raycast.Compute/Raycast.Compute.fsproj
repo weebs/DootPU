@@ -9,6 +9,8 @@
         <Compile Include="ImageDisplay.fs" />
         <Compile Include="ComputeShaders.fs" />
         <Compile Include="Raycast.Compute.fs" />
+        <Content Include="env.js" />
+        <Content Include="worker.js" />
     </ItemGroup>
 
     <ItemGroup>
@@ -16,8 +18,11 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Bolero.WebView" Version="1.0.0" />
+      <PackageReference Include="Bolero.WebView" Version="2024.7.26.27" />
+      <PackageReference Include="FSharp.Data.LiteralProviders" Version="1.0.3" />
       <PackageReference Include="GirCore.Gtk-4.0" Version="0.5.0" />
+      <PackageReference Include="WatsonWebsocket" Version="4.1.2" />
+      
     </ItemGroup>
 
 </Project>
