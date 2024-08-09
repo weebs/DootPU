@@ -182,15 +182,17 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         
     let containsVoxel pos =
         let i = toIndex pos
-        // let arrayIndex = uint i / 32u
-        // let n = voxelGrid[int arrayIndex]
-        // let arrayOffset = uint (i % 32)
-        // (n <<< int arrayOffset) >>> 31
-        let index = floor(float32 i / 32f)
-        let offset = i - (int index * 32)
-        let n = voxelGrid[int index]
+        let arrayIndex = uint i / 32u
+        let arrayOffset = uint (i % 32)
+        let n = voxelGrid[int arrayIndex]
+        
+        (n <<< int arrayOffset) >>> 31
+        // (n &&& (1u <<< (31 - int arrayOffset))) >>> 31 - int arrayOffset
+        
+        // let index = floor(float32 i / 32f)
+        // let offset = i - (int index * 32)
+        // let n = voxelGrid[int index]
         // (n <<< offset) >>> 31
-        (n &&& (1u <<< (31 - offset))) >>> 31 - offset
         // extractBits(n, arrayOffset, 1u)
         // let dbg = vec3(0f, 11f, 8f)
         // let p = toIndex dbg
@@ -284,13 +286,15 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         // let rgbS = rgb * 0.5f
         // vec4(rgbS, 1f)
 
-        let dir = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 1f)
-        let pos = dir + camera
+        let pixel = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0f) // * 32f
+        let pos = pixel + camera // + vec3(0f, 0f, -64f)
+        // let dir = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0.5f)
+        let dir = normalize(pixel + vec3(0f, 0f, 1f))
         let mutable p = pos
         let normalDir = normalize(dir)
         let mutable foundVoxel = containsVoxel p
         let mutable i = 0
-        while i < 1000 && foundVoxel = 0u do
+        while i < 700 && foundVoxel = 0u do
             let result = fastDda p dir
             p <- result.nextPos
             let temp = result.offsetVoxel
@@ -331,7 +335,7 @@ let init (window: IWindow) =
     //         Wgsl.vec4(r.NextSingle(), r.NextSingle(), r.NextSingle(), 1f)
     let wgpu = new WebGPU'(window)
     let state = wgpu.CreateBinder Shader
-    let cfg = { gridSize = 100 }
+    let cfg = { gridSize = 400 }
     let mapVoxels = Array.zeroCreate(cfg.gridSize * cfg.gridSize * cfg.gridSize)
     mapVoxels[0 + (11 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
     mapVoxels[8 + (11 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
@@ -353,7 +357,7 @@ let init (window: IWindow) =
         let offset = i % 32
         let value = compressedMap[index]
         let bit = if mapVoxels[i].w = 0f then 0u else 1u
-        // let bit = if r.NextSingle() < 0.07f then 1u else 0u
+        let bit = if r.NextSingle() < 0.07f then 1u else 0u
         let updated = value ||| (bit <<< (31 - offset))
         compressedMap[index] <- updated
         let result = containsVoxel i
@@ -380,23 +384,24 @@ let init (window: IWindow) =
         sw.Start()
         time <- time + t
 
+        let speed = 20f
         if keys[int Key.A] then
-            posX <- posX - 1f * float32 t
+            posX <- posX - speed * float32 t
 
         if keys[int Key.D] then
-            posX <- posX + 1f * float32 t
+            posX <- posX + speed * float32 t
 
         if keys[int Key.W] then
-            posZ <- posZ + 1f * float32 t
+            posZ <- posZ + speed * float32 t
 
         if keys[int Key.S] then
-            posZ <- posZ - 1f * float32 t
+            posZ <- posZ - speed * float32 t
             
         if keys[int Key.Space] then
-            posY <- posY + 1f * float32 t
+            posY <- posY + speed * float32 t
             
         if keys[int Key.ShiftLeft] then
-            posY <- posY - 1f * float32 t
+            posY <- posY - speed * float32 t
 
         let colorAttachment =
             RenderPassColorAttachment(

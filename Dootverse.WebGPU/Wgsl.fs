@@ -127,6 +127,7 @@ type mat2x2<'t>(mx: 't, my: 't, ma: 't, mb: 't) =
     static member (*) (m: mat2x2<float32>, b: float32) = m
 type Foo<'t> = 't
 type Wgsl =
+    static member abs(p: vec4<float32>) = failwith ""
     static member abs(p: vec3f) = failwith ""
     static member abs(f: float32) = MathF.Abs(f)
     static member abs(f: vec3f) : vec3f = Wgsl.vec3(abs(f.x), abs(f.y), abs(f.z))
