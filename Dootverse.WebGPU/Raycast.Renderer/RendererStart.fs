@@ -1,5 +1,5 @@
 ﻿module Raycast.Renderer.RendererStart
 
-// DdaRaymarchRender.run ()
+DdaRaymarchRender.run ()
 // SimpleVoxelRender.run ()
-HashmapVoxelRender.run ()
+// HashmapVoxelRender.run ()

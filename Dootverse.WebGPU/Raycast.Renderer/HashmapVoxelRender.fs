@@ -441,6 +441,8 @@ let init (window: IWindow) =
         wgpu.CommandBufferRelease(NativePtr.read buffer)
         encoder.Release()
         frame <- frame + 1
+        let _ = wgpu.DevicePoll(wgpu.Device.Device, true)
+        sw.Stop()
         if frame % 10 = 0 then
             printfn $"{float32 sw.ElapsedMilliseconds * 0.1f}"
             sw.Reset()
@@ -449,7 +451,8 @@ let init (window: IWindow) =
 let run () =
     let mutable options = WindowOptions.Default
     options.API <- GraphicsAPI.None
-    options.Size <- Vector2D(1920, 1080)
+    options.Size <- Vector2D(400, 300)
+    // options.Size <- Vector2D(1920, 1080)
     // options.Size <- Vector2D(960, 720)
     // options.Size <- Vector2D(480, 360)
     options.FramesPerSecond <- 60
