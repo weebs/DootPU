@@ -1,0 +1,461 @@
+﻿module Raycast.Renderer.HashmapVoxelRender
+
+open System
+open System.Runtime.InteropServices
+open System.Text
+open System.Threading.Tasks
+open Dootverse.WebGPU
+open Dootverse.WebGPU.Shaders
+open Dootverse.WebGPU.Wgsl
+open Raycast.Compute.ComputeShaders.Shaders
+open Silk.NET.Input
+open Microsoft.FSharp.NativeInterop
+open Silk.NET.Core.Native
+open Silk.NET.Maths
+open Silk.NET.WebGPU
+open Silk.NET.Windowing
+open System.Collections.Generic
+
+// let mutable shaderModule = Unchecked.defaultof<nativeptr<ShaderModule>>
+let mutable posX = 4f
+let mutable posZ = 0f
+let mutable posY = 11f
+let keys = Dictionary()
+
+keys[int Key.Space] <- false
+keys[int Key.ShiftLeft] <- false
+for i in 1..100 do
+    keys[i] <- false
+
+let binding0Size = 20uL
+
+// [<AbstractClass>]
+type WebGpuWin(window: IWindow, bindings: ShaderWithBindings) as this =
+    let mutable windowWidth = 1920
+    let mutable windowHeight = 1080
+    let wgpu = bindings.Info.wgpu
+    // let wgpu = wgpu
+    let surface = wgpu.Surface
+
+    let surfaceCapabilities =
+        let mutable result = Operators.Unchecked.defaultof<_>
+        wgpu.SurfaceGetCapabilities(surface, wgpu.Adapter, &result)
+        result
+
+    let shaderModule =
+        wgpu.CreateShader(wgpu.Device.Device, bindings.Info.code)
+
+    let groups =
+        wgpu.InitBindings
+            ShaderStage.Fragment
+            wgpu.Device.Device
+            bindings.Buffers
+
+    let swap () =
+        // let mutable surfaceConfig = Operators.Unchecked.defaultof<_>
+        // Create swap
+        let mutable surfaceConfig =
+            SurfaceConfiguration(
+                Usage = TextureUsage.RenderAttachment,
+                Format = NativePtr.read surfaceCapabilities.Formats,
+                PresentMode = PresentMode.Fifo,
+                Device = wgpu.Device.Device,
+                Width = uint window.FramebufferSize.X,
+                Height = uint window.FramebufferSize.Y
+            )
+
+        wgpu.SurfaceConfigure(surface, &surfaceConfig)
+
+    let renderPipeline =
+        let layout =
+            wgpu.CreatePipelineLayout(
+                wgpu.Device.Device,
+                [| groups.layout |]
+            )
+
+        let result =
+            Init.createRender
+                wgpu
+                wgpu.Device.Device
+                surfaceCapabilities
+                layout
+                shaderModule
+
+        swap()
+        result
+
+    do
+        window.add_Closing(fun () ->
+            wgpu.ShaderModuleRelease(shaderModule)
+            wgpu.RenderPipelineRelease(renderPipeline)
+            wgpu.DeviceRelease(wgpu.Device.Device)
+            wgpu.AdapterRelease(wgpu.Adapter)
+            wgpu.SurfaceRelease(surface)
+            wgpu.InstanceRelease(wgpu.Instance)
+            wgpu.Dispose()
+        )
+
+    let onFramebufferResize (size: Vector2D<int>) =
+        windowWidth <- size.X
+        windowHeight <- size.Y
+        swap()
+
+    do window.add_FramebufferResize onFramebufferResize
+
+    do
+        let input = window.CreateInput()
+
+        let onKeyDown (keyboard: IKeyboard) (key: Key) (code: int) =
+            keys[int key] <- true
+
+        let onKeyUp keyboard key code = keys[int key] <- false
+        let onMouseMove mouse movement = ()
+        let onMouseDown mouse button = ()
+        let onMouseUp mouse button = ()
+        input.Keyboards |> Seq.iter(fun k -> k.add_KeyDown onKeyDown)
+        input.Keyboards |> Seq.iter(fun k -> k.add_KeyUp onKeyUp)
+        input.Mice |> Seq.iter(fun m -> m.add_MouseMove onMouseMove)
+        input.Mice |> Seq.iter(fun m -> m.add_MouseDown onMouseDown)
+        input.Mice |> Seq.iter(fun m -> m.add_MouseUp onMouseDown)
+
+    member this.SurfaceCapabilities = surfaceCapabilities
+    member this.Surface = surface
+    member this.RenderPipeline = renderPipeline
+    member this.Window = window
+
+    member this.onRender value =
+        window.add_Render(fun t ->
+            let mutable texture = SurfaceTexture()
+            wgpu.SurfaceGetCurrentTexture(surface, &&texture)
+
+            match texture.Status with
+            | SurfaceGetCurrentTextureStatus.Timeout
+            | SurfaceGetCurrentTextureStatus.Lost
+            | SurfaceGetCurrentTextureStatus.Outdated ->
+                wgpu.TextureRelease(texture.Texture)
+                swap()
+            | SurfaceGetCurrentTextureStatus.OutOfMemory
+            | SurfaceGetCurrentTextureStatus.DeviceLost
+            | SurfaceGetCurrentTextureStatus.Force32 -> failwith "Error"
+            | SurfaceGetCurrentTextureStatus.Success -> ()
+            | _ -> ()
+
+            let view =
+                wgpu.TextureCreateView(
+                    texture.Texture,
+                    Unchecked.defaultof<nativeptr<_>>
+                )
+
+            value view t
+            wgpu.TextureViewRelease(view)
+            wgpu.TextureRelease(texture.Texture)
+        )
+
+
+    member this.Groups = groups
+    member this.BindGroup = groups.bindGroup
+    // let renderPipeline = this.Init
+    member this.Wgpu = wgpu
+// abstract member Init : nativeptr<RenderPipeline>
+// let vbLayout = VertexBufferLayout(
+//
+// )
+// type yo' (window: IWindow, wgpu: WebGPU', shaderCode, shader) as this =
+open type Wgsl
+open Raycast.Compute.ComputeShaders
+open System.Diagnostics
+type Config = { gridSize: int }
+type Output = {
+    [<Location(0)>]
+    xy: vec2<float32>
+    [<BuiltIn(Builtin'.position)>]
+    position: vec4<float32>
+}
+[<ReflectedDefinition>]
+type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) =
+    let toIndex (v: vec3f) =
+        let q = floor v
+        let x = int q.x
+        let y = int q.y
+        let z = int q.z
+        x + (y * config.gridSize) + (z * config.gridSize * config.gridSize)
+        
+    let containsVoxel pos =
+        let i = toIndex pos
+        // let arrayIndex = uint i / 32u
+        // let n = voxelGrid[int arrayIndex]
+        // let arrayOffset = uint (i % 32)
+        // (n <<< int arrayOffset) >>> 31
+        let index = floor(float32 i / 32f)
+        let offset = i - (int index * 32)
+        let n = voxelGrid[int index]
+        // (n <<< offset) >>> 31
+        (n &&& (1u <<< (31 - offset))) >>> 31 - offset
+        // extractBits(n, arrayOffset, 1u)
+        // let dbg = vec3(0f, 11f, 8f)
+        // let p = toIndex dbg
+        // if pos.x < 1f && pos.y >= 11f && pos.y <= 12f then
+            // 1u
+        // if i = p then
+        //     1u
+        // else
+    let containsVoxel2 pos =
+        let i = toIndex pos
+        voxelMap[i]
+        
+    let fastDda (rayPos: vec3f) (rayDir: vec3f) =
+        let mapPos = floor rayPos
+        let quantized = sign(rayDir)
+        let bGreater = greaterThan(quantized, vec3(0f))
+        let bLess = lessThan(quantized, vec3(0f))
+
+        let greater =
+            vec3(
+                float32(bGreater.x),
+                float32(bGreater.y),
+                float32(bGreater.z)
+            )
+
+        let lesser =
+            vec3(float32(bLess.x), float32(bLess.y), float32(bLess.z))
+
+        let nextVoxel =
+            (floor(quantized + rayPos) * greater)
+            + (ceil(quantized + rayPos) * lesser)
+
+        let mutable distancePerSide = abs(nextVoxel - rayPos)
+        let maxVal = 1000000000f
+        let mutable rayLengthPerSide = length(rayDir) / abs(rayDir)
+
+        if rayLengthPerSide.x = 1f / 0f then
+            rayLengthPerSide.x <- maxVal
+            distancePerSide.x <- maxVal
+
+        if rayLengthPerSide.y = 1f / 0f then
+            rayLengthPerSide.y <- maxVal
+            distancePerSide.y <- maxVal
+
+        if rayLengthPerSide.z = 1f / 0f then
+            rayLengthPerSide.z <- maxVal
+            distancePerSide.z <- maxVal
+
+        let sidePerLength = abs(rayDir) / length(rayDir)
+        let scaledPerSide = distancePerSide * rayLengthPerSide
+
+        let mask =
+            lessThanEqual(
+                scaledPerSide,
+                min(scaledPerSide.yzx, scaledPerSide.zxy)
+            )
+
+        let maskf = vec3(float32(mask.x), float32(mask.y), float32(mask.z))
+
+        let intermediateResult = scaledPerSide * maskf
+        // todo : max
+        let toTravel =
+            max(
+                intermediateResult.x,
+                max(intermediateResult.y, intermediateResult.z)
+            )
+
+        let offset = toTravel * sidePerLength * sign(rayDir)
+        let result = rayPos + offset
+        // let offsetVoxel = floor result - mapPos
+        // let offsetVoxel = maskf * quantized
+        // todo why does this work but mapPos + maskf * quantized doesn't
+        let tinyOffset = maskf * rayDir * 0.001f
+        let offsetVoxel = floor (result + tinyOffset)
+        // let offsetVoxel = mapPos + maskf * quantized
+
+        {
+            nextPos = result
+            voxel = floor result
+            offsetVoxel = offsetVoxel
+        }
+        : Raycast.Compute.ComputeShaders.Shaders.Result
+        
+    [<Fragment; Location 0>]
+    member this.fragment(vertexOutput: Output) =
+        // let rgb = (vec3(0f, vertexOutput.xy.x, vertexOutput.xy.y) + vec3(2f)) * 0.5f - 1f
+        // vec4(rgb, 1f)
+        // vec4(0.05f, vertexOutput.xy.x, vertexOutput.xy.y, 1f)
+
+        // let rgb = vec3(0f, vertexOutput.xy.x, vertexOutput.xy.y) + vec3(0f, 1f, 1f)
+        // let rgbS = rgb * 0.5f
+        // vec4(rgbS, 1f)
+
+        let dir = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 1f)
+        let pos = dir + camera
+        let mutable p = pos
+        let normalDir = normalize(dir)
+        let mutable foundVoxel = containsVoxel p
+        let mutable i = 0
+        while i < 1000 && foundVoxel = 0u do
+            let result = fastDda p dir
+            p <- result.nextPos
+            let temp = result.offsetVoxel
+            foundVoxel <- containsVoxel temp
+            i <- i + 1
+        if foundVoxel = 1u then
+            vec4(0f, dir.x + 0.5f, dir.y + 0.5f, 1f)
+        else
+            vec4(0f)
+        
+    [<Wgsl.Vertex>]
+    member this.vertex([<BuiltIn(Builtin'.vertex_index)>] index: uint) =
+        let pos = [|
+            vec2(-1f, 1f)
+            vec2(-1f, -1f)
+            vec2(1f, -1f)
+
+            vec2(1f, 1f)
+            vec2(-1f, 1f)
+            vec2(1f, -1f)
+        |]
+
+        let n = int index
+
+        {
+            xy = vec2(pos[n].x, pos[n].y)
+            position = vec4(pos[n], 0f, 1f)
+        }
+
+let sw = Stopwatch()
+let mutable frame = 0
+sw.Start()
+let init (window: IWindow) =
+    // let gridSize = 200
+    // let r = Random()
+    // for i in 1..10000 do
+    //     mapVoxels[r.NextInt64 mapVoxels.Length |> int] <-
+    //         Wgsl.vec4(r.NextSingle(), r.NextSingle(), r.NextSingle(), 1f)
+    let wgpu = new WebGPU'(window)
+    let state = wgpu.CreateBinder Shader
+    let cfg = { gridSize = 100 }
+    let mapVoxels = Array.zeroCreate(cfg.gridSize * cfg.gridSize * cfg.gridSize)
+    mapVoxels[0 + (11 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
+    mapVoxels[8 + (11 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
+    mapVoxels[4 + (15 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
+    mapVoxels[4 + (7 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
+    let temp = [||]
+    let dimensions = if mapVoxels.Length % 32 = 0 then mapVoxels.Length / 32 else mapVoxels.Length / 32 + 1
+    let compressedMap: uint[] =
+        // Array.zeroCreate (dimensions * dimensions * dimensions)
+        Array.zeroCreate dimensions
+    let containsVoxel i =
+        let arrayIndex = i / 32
+        let arrayOffset = i % 32
+        let n = compressedMap[arrayIndex]
+        (n <<< arrayOffset) >>> 31
+    let r = Random()
+    for i in 0..mapVoxels.Length - 1 do
+        let index = i / 32
+        let offset = i % 32
+        let value = compressedMap[index]
+        let bit = if mapVoxels[i].w = 0f then 0u else 1u
+        // let bit = if r.NextSingle() < 0.07f then 1u else 0u
+        let updated = value ||| (bit <<< (31 - offset))
+        compressedMap[index] <- updated
+        let result = containsVoxel i
+        if result <> bit then
+            printfn $"error"
+    let (config, state) = Wgpu.Bind state
+    let (camera, state) = Wgpu.Bind state
+    let (voxelGrid, state) = Wgpu.Bind state compressedMap.Length
+    // let (voxelMap, state) = Wgpu.Bind state mapVoxels.Length
+    let (voxelMap, state) = Wgpu.Bind state 1000
+    
+    // let cpuShader = Shader(cfg, compressedMap, [||])
+    // let result = cpuShader.fragment({ xy = { x = -0.7f; y = 0f }; position = Operators.Unchecked.defaultof<_> })
+        
+    let mutable wroteMap = false
+    let win = WebGpuWin(window, state)
+    let wgpu = win.Wgpu
+    printfn $"{state.Info.code}"
+
+    let mutable time = 0.
+
+    win.onRender (fun view t ->
+        // sw.Stop()
+        sw.Start()
+        time <- time + t
+
+        if keys[int Key.A] then
+            posX <- posX - 1f * float32 t
+
+        if keys[int Key.D] then
+            posX <- posX + 1f * float32 t
+
+        if keys[int Key.W] then
+            posZ <- posZ + 1f * float32 t
+
+        if keys[int Key.S] then
+            posZ <- posZ - 1f * float32 t
+            
+        if keys[int Key.Space] then
+            posY <- posY + 1f * float32 t
+            
+        if keys[int Key.ShiftLeft] then
+            posY <- posY - 1f * float32 t
+
+        let colorAttachment =
+            RenderPassColorAttachment(
+                View = view,
+                ResolveTarget = Unchecked.defaultof<_>,
+                LoadOp = LoadOp.Clear,
+                StoreOp = StoreOp.Store,
+                ClearValue = Color(0, 1, 0, 1)
+            )
+
+        let encoder = wgpu.Device.CreateCommandEncoder()
+        let queue = wgpu.Device.GetQueue()
+        let renderPass = encoder.StartRenderPass'(colorAttachment)
+        renderPass.SetPipeline win.RenderPipeline
+        renderPass.SetBindGroup win.BindGroup 0u
+
+        config.Write(wgpu, queue, cfg)
+        camera.Write(wgpu, queue, Wgsl.vec3(posX, posY, posZ))
+        // cfg.Write (wgpu, queue, { config with cameraX = posX; cameraY = posY; cameraZ = posZ })
+        if not wroteMap then
+            voxelGrid.Write(wgpu, queue, 0uL, compressedMap)
+            // voxelMap.Write(wgpu, queue, 0uL, mapVoxels |> Array.map (fun v -> if v.w = 0f then 0u else 1u))
+            wroteMap <- true
+            
+            // hashes.Write(wgpu, queue, 0uL, map.hashes)
+            // ids.Write(wgpu, queue, 0uL, map.ids)
+            // objects.Write(wgpu, queue, 0uL, map.objects)
+            // shapes.Write(wgpu, queue, 0uL, map.shapes)
+        // voxels.Write(wgpu, queue, 0uL, [| 1; 2; 3; 4; 5; 6; 7; 8; 0; 11 |])
+
+        // Vertex indicies for fragment shader
+        renderPass.Draw 6u 2u 0u 0u
+        renderPass.End()
+        let buffer = arrayPtr [| encoder.Finish() |]
+        wgpu.QueueSubmit(queue, unativeint 1, buffer)
+        wgpu.SurfacePresent(win.Surface)
+        wgpu.CommandBufferRelease(NativePtr.read buffer)
+        encoder.Release()
+        frame <- frame + 1
+        if frame % 10 = 0 then
+            printfn $"{float32 sw.ElapsedMilliseconds * 0.1f}"
+            sw.Reset()
+    )
+
+let run () =
+    let mutable options = WindowOptions.Default
+    options.API <- GraphicsAPI.None
+    options.Size <- Vector2D(1920, 1080)
+    // options.Size <- Vector2D(960, 720)
+    // options.Size <- Vector2D(480, 360)
+    options.FramesPerSecond <- 60
+    options.UpdatesPerSecond <- 60
+    options.Position <- Vector2D(400, 400)
+    options.Title <- "WebGPU Demo"
+    options.IsVisible <- true
+    options.ShouldSwapAutomatically <- true
+    options.IsContextControlDisabled <- false
+    // let window = Window.Create options
+    let window = Window.Create options
+    window.add_Load(fun () -> init window)
+    window.Run()
+    // yo' window

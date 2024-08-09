@@ -10,6 +10,18 @@ open Microsoft.FSharp.Reflection
 // open Wgsl
 // open type Quotations.Expr
 module Patterns = Quotations.Patterns
+type Bytes =
+    static let write = NativeInterop.NativePtr.write
+    static let set = NativeInterop.NativePtr.set
+    static member from (location: nativeptr<byte>) (offset: int) (f: float32) =
+        // let ptr = NativeInterop.NativePtr.stackalloc 1
+        // write ptr f
+        // let mutable f = f
+        // let asBytes = &&f |> NativeInterop.NativePtr.toNativeInt |> NativeInterop.NativePtr.ofNativeInt<byte>
+        let asFloat = location |> NativeInterop.NativePtr.toNativeInt |> NativeInterop.NativePtr.ofNativeInt<float32>
+        set asFloat offset f
+        
+        // NativeInterop.NativePtr.copyBlock location asBytes 4
 type E = Quotations.Expr
 
 type Fragment<'t> = Fragment of 't
@@ -65,6 +77,7 @@ and WgslConst =
     | Int of int
     | Float of float32
     | Unsigned of uint32
+    | Bool of bool
 
 type WgslExpr =
     | Call of callee: string * args: WgslExpr list
@@ -143,6 +156,7 @@ module rec Print =
     let call (callee: string) (args: WgslExpr list) =
         match callee with
         | "Sqrt" -> $"sqrt({expr args[0]})"
+        | "ToUInt" -> $"u32({expr args[0]})"
         | "ToInt" -> $"i32({expr args[0]})"
         | "ToSingle" -> $"f32({expr args[0]})"
         | "GetArray" -> $"{expr args[0]}[{expr args[1]}]"
@@ -151,6 +165,11 @@ module rec Print =
         | "op_Multiply" -> $"({expr args[0]} * {expr args[1]})"
         | "op_Addition" -> $"({expr args[0]} + {expr args[1]})"
         | "op_Division" -> $"({expr args[0]} / {expr args[1]})"
+        | "op_Modulus" -> $"({expr args[0]} %% {expr args[1]})"
+        | "op_RightShift" -> $"({expr args[0]} >> u32({expr args[1]}))"
+        | "op_LeftShift" -> $"({expr args[0]} << u32({expr args[1]}))"
+        | "op_BitwiseAnd" -> $"({expr args[0]} & u32({expr args[1]}))"
+        | "op_BitwiseOr" -> $"({expr args[0]} | u32({expr args[1]}))"
         | "op_Subtraction" -> $"({expr args[0]} - {expr args[1]})"
         | "op_GreaterThan" -> $"({expr args[0]} > {expr args[1]})"
         | "op_GreaterThanOrEqual" -> $"({expr args[0]} >= {expr args[1]})"
@@ -428,6 +447,18 @@ and translateExpr (expr: Quotations.Expr) =
     //     | Patterns.IfThenElse (cond)
     //     BinaryAnd (translateExpr cond, translateExpr true')
     | Patterns.Var v -> Ident v.Name
+    | Patterns.PropertyGet(Some a, propertyInfo, exprs) when FSharpType.IsUnion a.Type ->
+        let cases = FSharpType.GetUnionCases a.Type
+        let info = cases |> Array.find (fun c -> c.Name = propertyInfo.DeclaringType.Name)
+        let fields = info.GetFields()
+        let index = 
+            fields 
+            |> Array.findIndex (fun f -> f.Name = propertyInfo.Name)
+        let sizeOfPreviousFields = fields |> Array.take index |> Array.map _.PropertyType |> Array.map sizeofType
+        let fieldOffset = Array.sum sizeOfPreviousFields
+        let this_ = translateExpr a
+        translateWgslValue propertyInfo.PropertyType this_ fieldOffset
+        // PropGet(translateExpr a, propertyInfo.Name)
     | Patterns.PropertyGet(Some a, propertyInfo, exprs) ->
         PropGet(translateExpr a, propertyInfo.Name)
     | Patterns.ValueWithName(o, t, name) -> // TODO this must come before Patterns.Value
@@ -438,6 +469,7 @@ and translateExpr (expr: Quotations.Expr) =
         | :? float32 as f -> Value(Float f)
         | :? string as s -> Value(Unsigned 4205731365u)
         | :? uint as u -> Value(Unsigned u)
+        | :? bool as b -> Value(Bool b)
         | _ -> failwith $"translateExpr: Cannot translate value {o}"
     | Patterns.Application(callee, arg) -> call callee arg
     | Patterns.NewUnionCase(caseInfo, values) ->
@@ -472,7 +504,7 @@ and translateWgslValue t this_ offset =
         Call("vec3f", args)
     elif t = typeof<float32> then
         IndexAccess(PropGet(this_, "data"), Value(Int offset))
-    elif t = typeof<float32> then
+    elif t = typeof<int> then
         Call(
             "bitcast<i32>",
             [ IndexAccess(PropGet(this_, "data"), Value(Int offset)) ]
@@ -480,20 +512,39 @@ and translateWgslValue t this_ offset =
     else
         failwith ""
 
+and caseSize (c: UnionCaseInfo) =
+    let fields = c.GetFields()
+
+    fields
+    |> Array.map(_.PropertyType >> sizeofType)
+    |> Array.reduce (+)
+
 and sizeofType (t: Type) =
     if FSharpType.IsRecord t then
         let fields = FSharpType.GetRecordFields t
         fields |> Array.map(_.PropertyType >> sizeofType) |> Array.sum
     elif t = typeof<vec3<float32>> then
         3
-    else
-        1
+    elif t = typeof<float32> then 1
+    elif t = typeof<int> then 1
+    elif t = typeof<uint> then 1
+    elif FSharpType.IsUnion t then
+        FSharpType.GetUnionCases t
+        |> Array.map caseSize
+        |> Array.max
+        |> (+) 1 // + 1 for the tag field
+    else failwith $"Couldn't calculate size of type {t.FullName}"
 
 and serializeObj (o: obj) =
     match o with
     | :? int as i -> BitConverter.GetBytes i
     | :? uint as u -> BitConverter.GetBytes u
     | :? single as s -> BitConverter.GetBytes s
+    | :? vec3f as v -> [|
+        yield! BitConverter.GetBytes v.x
+        yield! BitConverter.GetBytes v.y
+        yield! BitConverter.GetBytes v.z
+      |]
     // | o when FSharpType.IsRecord (o.GetType()) ->
     // let fields =
     // | :? double as f -> BitConverter.GetBytes f
@@ -504,15 +555,7 @@ and serializeObj (o: obj) =
 and makeSerialize<'t> () =
     let t = typeof<'t>
 
-    if FSharpType.IsRecord t then
-        let fields = FSharpType.GetRecordFields t
-
-        fun (o: 't) -> [|
-            for field in fields do
-                let value = field.GetValue(o)
-                yield! serializeObj value
-        |]
-    elif t = typeof<int32> then
+    if t = typeof<int32> then
         fun (i: 't) -> BitConverter.GetBytes(box i :?> int32)
     elif t = typeof<float32> then
         fun (i: 't) -> BitConverter.GetBytes(box i :?> float32)
@@ -526,6 +569,46 @@ and makeSerialize<'t> () =
                 yield! BitConverter.GetBytes value.x
                 yield! BitConverter.GetBytes value.y
                 yield! BitConverter.GetBytes value.z
+            |]
+    elif t = typeof<vec4<float32>> then
+        
+        fun (i: 't) ->
+            let value = box i :?> vec4<float32>
+
+            let result = Array.zeroCreate 16
+            use ptr = fixed result
+            Bytes.from ptr 0 value.x
+            Bytes.from ptr 1 value.y
+            Bytes.from ptr 2 value.z
+            Bytes.from ptr 3 value.w
+            result
+    elif FSharpType.IsRecord t then
+        let fields = FSharpType.GetRecordFields t
+
+        fun (o: 't) -> [|
+            for field in fields do
+                let value = field.GetValue(o)
+                yield! serializeObj value
+        |]
+    elif FSharpType.IsUnion t then
+        let cases = FSharpType.GetUnionCases t
+
+        let maxCaseSize = cases |> Array.map(caseSize) |> Array.max
+
+        fun (o: 't) ->
+            let (info, fields) = FSharpValue.GetUnionFields(o, t)
+
+            let result = [|
+                for field in fields do
+                    yield! serializeObj field
+            |]
+
+            let remaining = maxCaseSize * 4 - result.Length
+
+            [|
+                yield! BitConverter.GetBytes info.Tag
+                yield! result
+                yield! Array.zeroCreate remaining
             |]
     else
         Debugger.Break()
@@ -570,7 +653,7 @@ and (|MatchExpr|_|) (statement: Quotations.Expr) =
     | _ -> None
 
 and getMatchExprs statement =
-    let rec loop acc statement =
+    let rec loop acc (statement: Expr) =
         match statement with
         // | MatchExpr (union, info, ifCase, else_) ->
         | MatchExpr(union, info, ifCase, else_) ->
@@ -678,8 +761,8 @@ and simplify (statement: Quotations.Expr) =
     | Patterns.IfThenElse(SimpleExpr cond, True, False) -> cond
     | _ -> statement
 
-and translateStatement (statement: Quotations.Expr) =
-    translateS statement
+and translateStatement (statement: Quotations.Expr) = translateS statement
+
 and private translateS (statement: Quotations.Expr) =
     match statement with
     | DecisionTree(union, ut, acc, e) ->
@@ -730,8 +813,7 @@ and private translateS (statement: Quotations.Expr) =
                 | Some e -> [
                     IfThenElse(
                         cond,
-                        createBindings tag bindings
-                        @ translateS expr,
+                        createBindings tag bindings @ translateS expr,
                         translateS e
                     )
                   ]
@@ -749,8 +831,7 @@ and private translateS (statement: Quotations.Expr) =
                 [
                     IfThenElse(
                         cond,
-                        createBindings tag bindings
-                        @ translateS expr,
+                        createBindings tag bindings @ translateS expr,
                         loop rest
                     )
                 ]
@@ -825,13 +906,7 @@ and private translateS (statement: Quotations.Expr) =
         let elseVars, elseBranch = loop else_ []
         // todo if the elseVars list is not empty, translate the union cases there too!
         if elseVars.Length = 0 then
-            [
-                IfThenElse(
-                    translateExpr cond,
-                    result,
-                    translateS else_
-                )
-            ]
+            [ IfThenElse(translateExpr cond, result, translateS else_) ]
         else
             let variables' = createVariables info elseVars
             let result' = variables' @ translateS rest
@@ -848,19 +923,13 @@ and private translateS (statement: Quotations.Expr) =
             ExprStatement(BinaryOr(translateExpr e, translateExpr else_))
 
         [ result ]
-    | Patterns.IfThenElse(cond, true', false') ->
-        [
-            IfThenElse(
-                translateExpr cond,
-                translateS true',
-                translateS false'
-            )
-        ]
+    | Patterns.IfThenElse(cond, true', false') -> [
+        IfThenElse(translateExpr cond, translateS true', translateS false')
+      ]
     | Patterns.WhileLoop(cond, loop) -> [
         WhileLoop(translateExpr cond, translateS loop)
       ]
-    | Patterns.Sequential(e, e') ->
-        translateS e @ translateS e'
+    | Patterns.Sequential(e, e') -> translateS e @ translateS e'
     | Patterns.VarSet(var, value) -> [
         Assign(Ident var.Name, translateExpr value)
       ]

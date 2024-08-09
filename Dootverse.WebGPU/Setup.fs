@@ -58,6 +58,12 @@ type Setup =
     static let window (wgpu, nativeInstance, surface) = null
     // static member inline compileModule<'a, 'b when 'b: (new: 'a -> 'b)> (constructor: 'a -> 'b) : Compiler.Module =
     static let compileMethod (method: MethodInfo) e =
+        let fn =
+            if method.ReturnType <> typeof<System.Void> then
+                Compiler.translateStatement (Wgpu.getMethodBody e)
+                |> Compiler.addReturn
+            else
+                Compiler.translateStatement (Wgpu.getMethodBody e)
         let result : Compiler.WgslFunc = {
             name = method.Name
             args =
@@ -85,12 +91,7 @@ type Setup =
             returnType =
                 if method.ReturnType = typeof<System.Void> then None
                 else Some (Compiler.toType method.ReturnType)
-            fn =
-                if method.ReturnType <> typeof<System.Void> then
-                    Compiler.translateStatement (Wgpu.getMethodBody e)
-                    |> Compiler.addReturn
-                else
-                    Compiler.translateStatement (Wgpu.getMethodBody e)
+            fn = fn
         } in result
     static member calculateBuffers (t: Type) =
         let ctor = t.GetConstructors() |> Seq.head
@@ -161,9 +162,12 @@ type Setup =
             |> Array.collect id
             |> structs.AddRange
         let compiled = ResizeArray()
+        try
         for (method, e) in methodQuotations.Values do
             let result = compileMethod method e
             compiled.Add result
+        with error ->
+            printfn $"{error}"
         {
             unfinishedBindings = Map.empty
             bindings = Setup.calculateBuffers t
@@ -342,6 +346,34 @@ type ShaderBinder<'t4, 't3, 't2, 't1>(data, acc: _ list) =
     member this.Info = data
     member this.Buffer = buffer
     member this.Rest info = ShaderBinder<'t3, 't2, 't1>(data, { ptr = buffer; info = info } :: acc)
+type ShaderBinder<'t5, 't4, 't3, 't2, 't1>(data, acc: _ list) =
+    // inherit ShaderBinding<'t1>(cons.Buffer1)
+    let buffer = ref Unchecked.defaultof<nativeptr<Buffer>>
+    // member this.Bindings = bindings
+    member this.Info = data
+    member this.Buffer = buffer
+    member this.Rest info = ShaderBinder<'t4, 't3, 't2, 't1>(data, { ptr = buffer; info = info } :: acc)
+type ShaderBinder<'t6, 't5, 't4, 't3, 't2, 't1>(data, acc: _ list) =
+    // inherit ShaderBinding<'t1>(cons.Buffer1)
+    let buffer = ref Unchecked.defaultof<nativeptr<Buffer>>
+    // member this.Bindings = bindings
+    member this.Info = data
+    member this.Buffer = buffer
+    member this.Rest info = ShaderBinder<'t5, 't4, 't3, 't2, 't1>(data, { ptr = buffer; info = info } :: acc)
+type ShaderBinder<'t7, 't6, 't5, 't4, 't3, 't2, 't1>(data, acc: _ list) =
+    // inherit ShaderBinding<'t1>(cons.Buffer1)
+    let buffer = ref Unchecked.defaultof<nativeptr<Buffer>>
+    // member this.Bindings = bindings
+    member this.Info = data
+    member this.Buffer = buffer
+    member this.Rest info = ShaderBinder<'t6, 't5, 't4, 't3, 't2, 't1>(data, { ptr = buffer; info = info } :: acc)
+type ShaderBinder<'t8, 't7, 't6, 't5, 't4, 't3, 't2, 't1>(data, acc: _ list) =
+    // inherit ShaderBinding<'t1>(cons.Buffer1)
+    let buffer = ref Unchecked.defaultof<nativeptr<Buffer>>
+    // member this.Bindings = bindings
+    member this.Info = data
+    member this.Buffer = buffer
+    member this.Rest info = ShaderBinder<'t7, 't6, 't5, 't4, 't3, 't2, 't1>(data, { ptr = buffer; info = info } :: acc)
 type ShaderVariable<'t>(buffer: _ ref, serializer: 't -> byte[]) =
     member this.Write(wgpu: WebGPU, queue, data: 't) =
         let serialized = serializer data
@@ -430,9 +462,15 @@ type Wgpu =
         let serializer = serializer |> Option.defaultWith (fun () ->
             Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
         ShaderBuffer<'t>(binding.Buffer, int info.size, serializer), binding.BufferRefs info
-    static member Bind(binding: ShaderBinder<'t[]>, ?serializer) = fun info ->
+    static member Bind'(binding: ShaderBinder<'t[]>, ?serializer) = fun info ->
         let serializer = serializer |> Option.defaultWith (fun () ->
             Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        ShaderBuffer<'t>(binding.Buffer, int info.size, serializer), binding.BufferRefs info
+    static member Bind(binding: ShaderBinder<'t[]>, ?serializer) = fun size ->
+        let serializer = serializer |> Option.defaultWith (fun () ->
+            Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let info = { size = size; isUniform = false; usage = bufferUsage }
         ShaderBuffer<'t>(binding.Buffer, int info.size, serializer), binding.BufferRefs info
     static member BindI(bindings: ShaderBinder<'t2[], 't1>, info, ?serializer) =
         let serializer = serializer |> Option.defaultWith (fun () ->
@@ -446,6 +484,41 @@ type Wgpu =
         let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t2>
         let info = { size = size; isUniform = false; usage = bufferUsage }
         ShaderBuffer<'t2>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+
+    static member Bind(bindings: ShaderBinder<'t[], 't1, 't2, 't3, 't4, 't5, 't6, 't7>, ?serializer) = fun size ->
+        let serializer = serializer |> Option.defaultWith (fun () ->
+            Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let info = { size = size; isUniform = false; usage = bufferUsage }
+        ShaderBuffer<'t>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+    static member Bind(bindings: ShaderBinder<'t[], 't1, 't2, 't3, 't4, 't5, 't6>, ?serializer) = fun size ->
+        let serializer = serializer |> Option.defaultWith (fun () ->
+            Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let info = { size = size; isUniform = false; usage = bufferUsage }
+        ShaderBuffer<'t>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+
+    static member Bind(bindings: ShaderBinder<'t[], 't1, 't2, 't3, 't4, 't5>, ?serializer) = fun size ->
+        let serializer = serializer |> Option.defaultWith (fun () ->
+            Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let info = { size = size; isUniform = false; usage = bufferUsage }
+        ShaderBuffer<'t>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+
+    static member Bind(bindings: ShaderBinder<'t[], 't1, 't2, 't3, 't4>, ?serializer) = fun size ->
+        let serializer = serializer |> Option.defaultWith (fun () ->
+            Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let info = { size = size; isUniform = false; usage = bufferUsage }
+        ShaderBuffer<'t>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+
+    static member Bind(bindings: ShaderBinder<'t[], 't1, 't2, 't3>, ?serializer) = fun size ->
+        let serializer = serializer |> Option.defaultWith (fun () ->
+            Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+        let size = size * 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+        let info = { size = size; isUniform = false; usage = bufferUsage }
+        ShaderBuffer<'t>(bindings.Buffer, int info.size, serializer), bindings.Rest info
+
     static member Bind(bindings: ShaderBinder<'t[], 't1, 't2>, ?serializer) = fun size ->
         let serializer = serializer |> Option.defaultWith (fun () ->
             Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
@@ -505,6 +578,25 @@ module WebGPUBindExtensions =
     //     ()
     let bufferUsage = BufferUsage.CopySrc ||| BufferUsage.CopyDst ||| BufferUsage.Storage
     type Wgpu with
+        static member Bind(binding: ShaderBinder<'t, 't1, 't2, 't3, 't4, 't5, 't6>, ?serializer) =
+            let serializer = serializer |> Option.defaultWith (fun () ->
+                Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+            let size = 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+            let info = { size = size; isUniform = false; usage = bufferUsage }
+            ShaderVariable<'t>(binding.Buffer, serializer), binding.Rest info
+        static member Bind(binding: ShaderBinder<'t, 't1, 't2, 't3, 't4, 't5>, ?serializer) =
+            let serializer = serializer |> Option.defaultWith (fun () ->
+                Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+            let size = 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+            let info = { size = size; isUniform = false; usage = bufferUsage }
+            ShaderVariable<'t>(binding.Buffer, serializer), binding.Rest info
+        static member Bind(binding: ShaderBinder<'t, 't1, 't2, 't3, 't4>, ?serializer) =
+            let serializer = serializer |> Option.defaultWith (fun () ->
+                Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+            let size = 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+            let info = { size = size; isUniform = false; usage = bufferUsage }
+            ShaderVariable<'t>(binding.Buffer, serializer), binding.Rest info
+
         static member Bind(binding: ShaderBinder<'t>, ?serializer) = fun info ->
             let serializer = serializer |> Option.defaultWith (fun () ->
                 Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
@@ -519,6 +611,7 @@ module WebGPUBindExtensions =
             let size = 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t3>
             let info = { size = size; isUniform = false; usage = bufferUsage }
             ShaderVariable<'t3>(binding.Buffer, serializer), binding.Rest info
+
         static member BindI(binding: ShaderBinder<'t3, 't2, 't1>, info, ?serializer) =
             let serializer = serializer |> Option.defaultWith (fun () ->
                 Dootverse.WebGPU.Compiler.makeSerialize<'t3> ())
@@ -746,6 +839,24 @@ module Extensions =
             let code = Compiler.Print.module' m
             let info = { wgpu = this; code = code }
             ShaderBinder<'a, 'b, 'c, 'd>(info, [])
+        member this.CreateBinder (shader: 'a * 'b * 'c * 'd * 'e -> _) =
+            let m = Setup.compileModule shader
+            let code = Compiler.Print.module' m
+            printfn $"{code}"
+            let info = { wgpu = this; code = code }
+            ShaderBinder<'a, 'b, 'c, 'd, 'e>(info, [])
+        member this.CreateBinder (shader: 'a * 'b * 'c * 'd * 'e * 'f -> _) =
+            let m = Setup.compileModule shader
+            let code = Compiler.Print.module' m
+            printfn $"{code}"
+            let info = { wgpu = this; code = code }
+            ShaderBinder<'a, 'b, 'c, 'd, 'e, 'f>(info, [])
+        member this.CreateBinder (shader: 'a * 'b * 'c * 'd * 'e * 'f * 'g -> _) =
+            let m = Setup.compileModule shader
+            let code = Compiler.Print.module' m
+            printfn $"{code}"
+            let info = { wgpu = this; code = code }
+            ShaderBinder<'a, 'b, 'c, 'd, 'e, 'f, 'g>(info, [])
         member this.CreateBinder (shader: Quotations.Expr<'a * 'b * 'c * 'd -> _>) =
             // failwith ""
             // Unchecked.defaultof<ShaderBinder<'a, 'b, 'c, 'd>>

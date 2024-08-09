@@ -6,6 +6,7 @@ open System.Numerics
 open Microsoft.FSharp.Core
 open Microsoft.FSharp.Reflection
 open type Quotations.Expr
+open System.Runtime.InteropServices
 module Patterns = Quotations.Patterns
 
 
@@ -60,7 +61,7 @@ type vec2<'t when
     member this.xxy = Operators.Unchecked.defaultof<vec3<'t>>
     member this.yxx = Operators.Unchecked.defaultof<vec3<'t>>
     member this.xyx = Operators.Unchecked.defaultof<vec3<'t>>
-and vec4<'t when 't :> IAdditionOperators<'t, 't, 't> and 't : (static member (-) : 't * 't -> 't)> = 
+and [<Struct; StructLayout(LayoutKind.Sequential)>] vec4<'t when 't :> IAdditionOperators<'t, 't, 't> and 't : (static member (-) : 't * 't -> 't)> = 
     { mutable x: 't; mutable y: 't; mutable z: 't; mutable w: 't }
 // type vec4<'t>(x: 't, y: 't, z: 't, a: 't) =
 //     member this.X with get () = x and set value = ()
@@ -143,12 +144,17 @@ type Wgsl =
     static member max(a: vec3<float32>, b: vec3<float32>) : vec3<float32> =
         Wgsl.vec3(max a.x b.x, max a.y b.y, max a.z b.z)
     static member min(a: vec3<float32>, b: vec3<float32>) : vec3<float32> =
-        Wgsl.vec3(min a.x b.x, min a.y b.y, min a.z b.z)
+        let x = min a.x b.x
+        let y = min a.y b.y
+        let z = min a.z b.z
+        Wgsl.vec3(x, y, z)
     // static member max(a: vec3f, b: float32) = failwith ""
     static member max(a: float32, b: float32) = MathF.Max(a, b)
     static member inline vec2(a, b) = { x = a; y = b; }
     static member inline vec3(a) = { x = a; y = a; z = a }
-    static member vec3(a, b, c) = { x = a; y = b; z = c }
+    static member vec3(a: int, b, c) : vec3<int> = { x = a; y = b; z = c }
+    static member vec3(a: float32, b, c) : vec3<float32> = { x = a; y = b; z = c }
+    static member vec3(a: uint, b, c) : vec3<uint> = { x = a; y = b; z = c }
     static member inline lessThanEqual (a: vec3<'t>, b: vec3<'t>) =
         {
             x = if a.x <= b.x then 1f else 0f
@@ -188,6 +194,7 @@ type Wgsl =
     static member ceil (a: float32) : float32 = MathF.Ceiling a
     static member ceil (a: vec3<float32>) : vec3<float32> = Wgsl.vec3(ceil(a.x), ceil(a.y), ceil(a.z))
     static member floor (a: vec3<float32>) : vec3<float32> = Wgsl.vec3(floor(a.x), floor(a.y), floor(a.z))
+    static member extractBits (e: uint, offset: uint, count: uint) = (e <<< (31 - int offset)) >>> (31 - int count)
     static member sign (a: vec3<float32>) : vec3<float32> =
         {
             x = if a.x > 0f then 1f elif a.x < 0f then -1f else 0f

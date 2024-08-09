@@ -11,6 +11,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Raycast.Compute", "Raycast.
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Raycast.Renderer", "Raycast.Renderer\Raycast.Renderer.fsproj", "{2051095A-B37F-4ABC-B56C-B0CC45CF8E9B}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Bolero.WebView", "..\..\..\mon\Bolero.WebView\Bolero.WebView.fsproj", "{6A0A8388-AF74-4D7C-A8D1-F94DC3F60091}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "quicktest", "quicktest\quicktest.fsproj", "{6F068918-BD20-4C36-8DB0-A06B37693938}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +40,13 @@ Global
 		{2051095A-B37F-4ABC-B56C-B0CC45CF8E9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2051095A-B37F-4ABC-B56C-B0CC45CF8E9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2051095A-B37F-4ABC-B56C-B0CC45CF8E9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A0A8388-AF74-4D7C-A8D1-F94DC3F60091}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A0A8388-AF74-4D7C-A8D1-F94DC3F60091}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A0A8388-AF74-4D7C-A8D1-F94DC3F60091}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A0A8388-AF74-4D7C-A8D1-F94DC3F60091}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6F068918-BD20-4C36-8DB0-A06B37693938}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F068918-BD20-4C36-8DB0-A06B37693938}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F068918-BD20-4C36-8DB0-A06B37693938}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F068918-BD20-4C36-8DB0-A06B37693938}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
