@@ -19,7 +19,7 @@ open System.Collections.Generic
 // let mutable shaderModule = Unchecked.defaultof<nativeptr<ShaderModule>>
 let mutable posX = 4f
 let mutable posZ = 0f
-let mutable posY = 11f
+let mutable posY = -11f
 let keys = Dictionary()
 
 keys[int Key.Space] <- false
@@ -164,7 +164,7 @@ type WebGpuWin(window: IWindow, bindings: ShaderWithBindings) as this =
 open type Wgsl
 open Raycast.Compute.ComputeShaders
 open System.Diagnostics
-type Config = { gridSize: int }
+type Config = { t: float32; gridSize: int }
 type Output = {
     [<Location(0)>]
     xy: vec2<float32>
@@ -172,7 +172,7 @@ type Output = {
     position: vec4<float32>
 }
 [<ReflectedDefinition>]
-type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) =
+type Shader(config: Config, camera: vec3f, voxelGrid: uint[], hashes: int[], voxelMap: Id[]) =
     let toIndex (v: vec3f) =
         let q = floor v
         let x = int q.x
@@ -277,6 +277,9 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         }
         : Raycast.Compute.ComputeShaders.Shaders.Result
         
+    let Modf (f: float32) =
+        f - float32 (int32 f)
+        // let mutable remainder = f 
     [<Fragment; Location 0>]
     member this.fragment(vertexOutput: Output) =
         // let rgb = (vec3(0f, vertexOutput.xy.x, vertexOutput.xy.y) + vec3(2f)) * 0.5f - 1f
@@ -287,11 +290,15 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         // let rgbS = rgb * 0.5f
         // vec4(rgbS, 1f)
 
-        let pixel = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0f) * 32f
-        let pos = pixel + camera // + vec3(0f, 0f, -64f)
+        let scale = 1f
+        let pixel = scale * vec3(vertexOutput.xy.x * 4f / 3f, vertexOutput.xy.y, 2f)
+        // let pos = (pixel * 32f) + camera + vec3(0f, 0f, -80f) // + vec3(0f, 0f, -64f)
+        let dir = normalize(pixel) // + vec3(0f, 0f, scale))
+        let pos = pixel + camera
         // let dir = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0.5f)
-        let dir = normalize(pixel + vec3(0f, 0f, 1f))
-        let mutable p = pos
+        // let dir = normalize(pixel + vec3(0f, 0f, 1f)) * 0.04f
+        // let dir = normalize(pos - camera + vec3(0f, 0f, 40f))
+        let mutable p = pos // - vec3(0f, 0f, 1f)
         let normalDir = normalize(dir)
         let mutable voxel = floor p
         let mutable foundVoxel = containsVoxel voxel
@@ -300,13 +307,32 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         while i < 700 && foundVoxel = 0u do
             let result = fastDda p dir
             p <- result.nextPos
-            voxel <- result.offsetVoxel
+            voxel <- result.offsetVoxel // * 0.125f
             mask <- result.mask
             foundVoxel <- containsVoxel voxel
             i <- i + 1
         if foundVoxel = 1u then
-            let normal = mask * sign(dir) * vec3(-1f)
-            vec4(cross(normal, normalDir), 1f)
+            let index = toIndex voxel
+            let hash = index % 1000
+            let Ptr = hashes[hash]
+            let mutable offset = 1
+            let maxOffset = voxelMap[Ptr].Ptr
+            let mutable id = voxelMap[Ptr + offset].id
+            while offset <= maxOffset && id <> index do
+                offset <- offset + 1
+                id <- voxelMap[Ptr + offset].id
+            if id = index then
+                // vec4(0f, float32 offset / 20f, float32 offset / 40f, 1f)
+                let normal = mask * sign(dir) * vec3(-1f)
+                let result = normalize(cross(normal, normalDir) + p)
+                let sunlight = 1f //dot(normal, vec3(1f, 1f, -2f))
+                let rgb = vec3((cos(3.14f * result.x + config.t) + 2f) * 0.5f, (cos(3.14f * 3f * result.y + config.t) + 2f) * 0.5f, (cos(3.14f * 8.2f * result.z + config.t) + 2f) * 0.5f)
+                vec4(sunlight * rgb, 1f)
+            else
+                let normal = mask * sign(dir) * vec3(-1f)
+                let result = normalize(cross(normal, normalDir) + p)
+                // vec4(abs(result), 1f)
+                vec4(0f)
             // vec4(0f, dir.x + 0.5f, dir.y + 0.5f, 1f)
         else
             vec4(0f)
@@ -333,6 +359,7 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
 let sw = Stopwatch()
 let mutable frame = 0
 sw.Start()
+
 let init (window: IWindow) =
     // let gridSize = 200
     // let r = Random()
@@ -341,7 +368,7 @@ let init (window: IWindow) =
     //         Wgsl.vec4(r.NextSingle(), r.NextSingle(), r.NextSingle(), 1f)
     let wgpu = new WebGPU'(window)
     let state = wgpu.CreateBinder Shader
-    let cfg = { gridSize = 400 }
+    let mutable cfg = { gridSize = 400; t = 0f }
     let mapVoxels = Array.zeroCreate(cfg.gridSize * cfg.gridSize * cfg.gridSize)
     mapVoxels[0 + (11 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
     mapVoxels[8 + (11 * cfg.gridSize) + (8 * cfg.gridSize * cfg.gridSize)] <- Wgsl.vec4(0f, 1f, 1f, 1f)
@@ -357,7 +384,39 @@ let init (window: IWindow) =
         let arrayOffset = i % 32
         let n = compressedMap[arrayIndex]
         (n <<< arrayOffset) >>> 31
+    let makeData (voxels: ((int * int * int) * int) seq) =
+        let compressedMap: uint[] =
+            Array.zeroCreate dimensions
+        let hashVoxels = Dictionary()
+        let hashes = Array.zeroCreate 1000
+        for ((x, y, z), data) in voxels do
+            let index = x + (y * cfg.gridSize) + (z * cfg.gridSize * cfg.gridSize)
+            let i = index / 32
+            let o = index % 32
+            let value = compressedMap[int i]
+            let updated = value ||| (1u <<< (31 - o))
+            compressedMap[int i] <- updated
+            if not (hashVoxels.ContainsKey (index % 1000)) then
+                hashVoxels[index % 1000] <- ResizeArray()
+            hashVoxels[index % 1000].Add { id = index; Ptr = data }
+        let voxelMap = ResizeArray()
+        for i in 0..1000 - 1 do
+            let voxels = if hashVoxels.ContainsKey i then hashVoxels[i] else ResizeArray()
+            hashes[i] <- voxelMap.Count
+            voxelMap.Add { id = i; Ptr = voxels.Count }
+            if hashVoxels.ContainsKey i then
+                for voxel in hashVoxels[i] do
+                    voxelMap.Add voxel
+        {| compressed = compressedMap; hashes = hashes; voxelMap = voxelMap.ToArray() |}
+        
     let r = Random()
+    let mapData = makeData [
+        (0, 0, 0), 420
+        for i in 1..10_000_00 do
+            (r.NextInt64 (int64 cfg.gridSize) |> int, r.NextInt64 (int64 cfg.gridSize) |> int, r.NextInt64 (int64 cfg.gridSize) |> int), 1
+    ]
+        
+        
     for i in 0..mapVoxels.Length - 1 do
         let index = i / 32
         let offset = i % 32
@@ -371,9 +430,10 @@ let init (window: IWindow) =
             printfn $"error"
     let (config, state) = Wgpu.Bind state
     let (camera, state) = Wgpu.Bind state
-    let (voxelGrid, state) = Wgpu.Bind state compressedMap.Length
+    let (voxelGrid, state) = Wgpu.Bind state mapData.compressed.Length
+    let (hashesBuffer, state) = Wgpu.Bind state mapData.hashes.Length
     // let (voxelMap, state) = Wgpu.Bind state mapVoxels.Length
-    let (voxelMap, state) = Wgpu.Bind state 1000
+    let (voxelMap, state) = Wgpu.Bind state mapData.voxelMap.Length
     
     // let cpuShader = Shader(cfg, compressedMap, [||])
     // let result = cpuShader.fragment({ xy = { x = -0.7f; y = 0f }; position = Operators.Unchecked.defaultof<_> })
@@ -383,12 +443,11 @@ let init (window: IWindow) =
     let wgpu = win.Wgpu
     printfn $"{state.Info.code}"
 
-    let mutable time = 0.
-
     win.onRender (fun view t ->
         // sw.Stop()
         sw.Start()
-        time <- time + t
+        // time <- time + t
+        cfg <- { cfg with t = cfg.t + float32 t }
 
         let speed = 20f
         if keys[int Key.A] then
@@ -428,7 +487,9 @@ let init (window: IWindow) =
         camera.Write(wgpu, queue, Wgsl.vec3(posX, posY, posZ))
         // cfg.Write (wgpu, queue, { config with cameraX = posX; cameraY = posY; cameraZ = posZ })
         if not wroteMap then
-            voxelGrid.Write(wgpu, queue, 0uL, compressedMap)
+            voxelGrid.Write(wgpu, queue, 0uL, mapData.compressed)
+            hashesBuffer.Write(wgpu, queue, 0uL, mapData.hashes)
+            voxelMap.Write(wgpu, queue, 0uL, mapData.voxelMap)
             // voxelMap.Write(wgpu, queue, 0uL, mapVoxels |> Array.map (fun v -> if v.w = 0f then 0u else 1u))
             wroteMap <- true
             

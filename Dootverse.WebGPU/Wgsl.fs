@@ -182,6 +182,7 @@ type Wgsl =
         }
     static member inline vec4(a, b, c, d) = { x = a; y = b; z = c; w = d; }
     static member cross(a: vec3f, b: vec3f) : vec3f = failwith "TODO : Wgsl cross(v1, v2)"
+    static member dot(a: vec3f, b: vec3f) : vec3f = failwith "TODO : Wgsl dot(v1, v2)"
     static member vec4(value: float32) = Wgsl.vec4(value, value, value, value)
     static member vec4(value: int32) = Wgsl.vec4(value, value, value, value)
     static member vec4(value: vec2<float32>, a, b) = Wgsl.vec4(value.x, value.y, a, b)

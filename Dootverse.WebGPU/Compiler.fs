@@ -158,6 +158,8 @@ module rec Print =
         | "Sqrt" -> $"sqrt({expr args[0]})"
         | "ToUInt" -> $"u32({expr args[0]})"
         | "ToInt" -> $"i32({expr args[0]})"
+        | "Cos" -> $"cos({expr args[0]})"
+        | "ToInt32" -> $"i32({expr args[0]})"
         | "ToSingle" -> $"f32({expr args[0]})"
         | "GetArray" -> $"{expr args[0]}[{expr args[1]}]"
         | "SetArray" -> $"{expr args[0]}[{expr args[1]}] = {expr args[2]}"
