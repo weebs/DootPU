@@ -186,8 +186,8 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         let arrayOffset = uint (i % 32)
         let n = voxelGrid[int arrayIndex]
         
-        (n <<< int arrayOffset) >>> 31
-        // (n &&& (1u <<< (31 - int arrayOffset))) >>> 31 - int arrayOffset
+        // (n <<< int arrayOffset) >>> 31
+        (n &&& (1u <<< (31 - int arrayOffset))) >>> 31 - int arrayOffset
         
         // let index = floor(float32 i / 32f)
         // let offset = i - (int index * 32)
@@ -273,6 +273,7 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
             nextPos = result
             voxel = floor result
             offsetVoxel = offsetVoxel
+            mask = maskf
         }
         : Raycast.Compute.ComputeShaders.Shaders.Result
         
@@ -286,22 +287,27 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], voxelMap: uint[]) 
         // let rgbS = rgb * 0.5f
         // vec4(rgbS, 1f)
 
-        let pixel = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0f) // * 32f
+        let pixel = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0f) * 32f
         let pos = pixel + camera // + vec3(0f, 0f, -64f)
         // let dir = vec3(vertexOutput.xy.x, vertexOutput.xy.y, 0.5f)
         let dir = normalize(pixel + vec3(0f, 0f, 1f))
         let mutable p = pos
         let normalDir = normalize(dir)
-        let mutable foundVoxel = containsVoxel p
+        let mutable voxel = floor p
+        let mutable foundVoxel = containsVoxel voxel
         let mutable i = 0
+        let mutable mask = vec3(0f, 0f, 0f)
         while i < 700 && foundVoxel = 0u do
             let result = fastDda p dir
             p <- result.nextPos
-            let temp = result.offsetVoxel
-            foundVoxel <- containsVoxel temp
+            voxel <- result.offsetVoxel
+            mask <- result.mask
+            foundVoxel <- containsVoxel voxel
             i <- i + 1
         if foundVoxel = 1u then
-            vec4(0f, dir.x + 0.5f, dir.y + 0.5f, 1f)
+            let normal = mask * sign(dir) * vec3(-1f)
+            vec4(cross(normal, normalDir), 1f)
+            // vec4(0f, dir.x + 0.5f, dir.y + 0.5f, 1f)
         else
             vec4(0f)
         

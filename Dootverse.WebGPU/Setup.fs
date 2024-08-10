@@ -578,6 +578,12 @@ module WebGPUBindExtensions =
     //     ()
     let bufferUsage = BufferUsage.CopySrc ||| BufferUsage.CopyDst ||| BufferUsage.Storage
     type Wgpu with
+        static member Bind(binding: ShaderBinder<'t, 't1, 't2, 't3, 't4, 't5, 't6, 't7>, ?serializer) =
+            let serializer = serializer |> Option.defaultWith (fun () ->
+                Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
+            let size = 4 * Dootverse.WebGPU.Compiler.sizeofType typeof<'t>
+            let info = { size = size; isUniform = false; usage = bufferUsage }
+            ShaderVariable<'t>(binding.Buffer, serializer), binding.Rest info
         static member Bind(binding: ShaderBinder<'t, 't1, 't2, 't3, 't4, 't5, 't6>, ?serializer) =
             let serializer = serializer |> Option.defaultWith (fun () ->
                 Dootverse.WebGPU.Compiler.makeSerialize<'t> ())
@@ -857,6 +863,12 @@ module Extensions =
             printfn $"{code}"
             let info = { wgpu = this; code = code }
             ShaderBinder<'a, 'b, 'c, 'd, 'e, 'f, 'g>(info, [])
+        member this.CreateBinder (shader: 'a * 'b * 'c * 'd * 'e * 'f * 'g * 'h -> _) =
+            let m = Setup.compileModule shader
+            let code = Compiler.Print.module' m
+            printfn $"{code}"
+            let info = { wgpu = this; code = code }
+            ShaderBinder<'a, 'b, 'c, 'd, 'e, 'f, 'g, 'h>(info, [])
         member this.CreateBinder (shader: Quotations.Expr<'a * 'b * 'c * 'd -> _>) =
             // failwith ""
             // Unchecked.defaultof<ShaderBinder<'a, 'b, 'c, 'd>>
