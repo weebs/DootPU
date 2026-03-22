@@ -171,6 +171,7 @@ type Output = {
     [<BuiltIn(Builtin'.position)>]
     position: vec4<float32>
 }
+type Id = { id: int; Ptr: int }
 [<ReflectedDefinition>]
 type Shader(config: Config, camera: vec3f, voxelGrid: uint[], hashes: int[], voxelMap: Id[]) =
     let toIndex (v: vec3f) =

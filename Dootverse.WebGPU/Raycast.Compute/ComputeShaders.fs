@@ -65,6 +65,7 @@ module Shaders =
         nextPos: vec3f
         voxel: vec3f
         offsetVoxel: vec3f
+        mask: vec3f
     }
 
     type Raycaster
@@ -163,6 +164,7 @@ module Shaders =
                 // voxel = floor (toReturn + (rayStep * epsilon * maskf))
                 voxel = mapPos + (maskf * rayStep)
                 offsetVoxel = floor toReturn - mapPos
+                mask = maskf
             // voxel = floor(rayPos + (maskf * rayStep) + (0.5f * maskf * rayStep))
             }
         // member this.raycast (pixelX, pixelY) =
@@ -302,6 +304,7 @@ module Shaders =
                 nextPos = result
                 voxel = floor result
                 offsetVoxel = offsetVoxel
+                mask = maskf
             }
 
         // let closestVoxel = sign(rayDir)

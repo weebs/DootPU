@@ -7,10 +7,10 @@
     <Compile Include="Global.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="Init.fs" />
-    <Compile Include="RaymarchingVertexFragmentShader.fs" />
-    <Compile Include="DdaVertexFragmentShader.fs" />
-    <Compile Include="SimpleVoxelRender.fs" />
-    <Compile Include="DdaRaymarchRender.fs" />
+<!--    <Compile Include="RaymarchingVertexFragmentShader.fs" />-->
+<!--    <Compile Include="DdaVertexFragmentShader.fs" />-->
+<!--    <Compile Include="SimpleVoxelRender.fs" />-->
+<!--    <Compile Include="DdaRaymarchRender.fs" />-->
     <Compile Include="HashmapVoxelRender.fs" />
     <Compile Include="RendererStart.fs" />
   </ItemGroup>
