@@ -16,6 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Dootverse.WebGPU.fsproj" />
-    <ProjectReference Include="..\Raycast.Compute\Raycast.Compute.fsproj" />
+<!--    <ProjectReference Include="..\Raycast.Compute\Raycast.Compute.fsproj" />-->
   </ItemGroup>
 </Project>

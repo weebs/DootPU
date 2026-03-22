@@ -7,7 +7,7 @@ open System.Threading.Tasks
 open Dootverse.WebGPU
 open Dootverse.WebGPU.Shaders
 open Dootverse.WebGPU.Wgsl
-open Raycast.Compute.ComputeShaders.Shaders
+// open Raycast.Compute.ComputeShaders.Shaders
 open Silk.NET.Input
 open Microsoft.FSharp.NativeInterop
 open Silk.NET.Core.Native
@@ -162,9 +162,17 @@ type WebGpuWin(window: IWindow, bindings: ShaderWithBindings) as this =
 // )
 // type yo' (window: IWindow, wgpu: WebGPU', shaderCode, shader) as this =
 open type Wgsl
-open Raycast.Compute.ComputeShaders
+// open Raycast.Compute.ComputeShaders
 open System.Diagnostics
 type Config = { t: float32; gridSize: int }
+    
+type Result =
+    {
+        nextPos: vec3f
+        voxel: vec3f
+        offsetVoxel: vec3f
+        mask: vec3f
+    }
 type Output = {
     [<Location(0)>]
     xy: vec2<float32>
@@ -276,7 +284,6 @@ type Shader(config: Config, camera: vec3f, voxelGrid: uint[], hashes: int[], vox
             offsetVoxel = offsetVoxel
             mask = maskf
         }
-        : Raycast.Compute.ComputeShaders.Shaders.Result
         
     let Modf (f: float32) =
         f - float32 (int32 f)
